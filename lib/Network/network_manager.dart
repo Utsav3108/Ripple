@@ -84,11 +84,13 @@ class Network {
   Future<Response> send({required Request request}) {
     switch (request.method) {
       case HTTPMethod.GET:
-        return dio.get(createURL(endpoint: request.url), data: request.body);
+        return dio.get(
+          createURL(endpoint: request.url),
+          queryParameters: request.body is Map<String, dynamic> ? request.body : null,
+        );
       case HTTPMethod.POST:
         return dio.post(createURL(endpoint: request.url), data: request.body);
       case HTTPMethod.PUT:
-        print("PUT request for ${request.body}");
         return dio.put(createURL(endpoint: request.url), data: request.body);
       case HTTPMethod.DELETE:
         return dio.delete(createURL(endpoint: request.url), data: request.body);
@@ -123,6 +125,3 @@ class APIExceptions implements Exception {
   @override
   String toString() => message;
 }
-
-
-

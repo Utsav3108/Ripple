@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'Provider/chat_provider.dart';
-import 'Theme/app_theme.dart';
+import 'chat_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -107,7 +107,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                   borderRadius: BorderRadius.circular(24),
                                   child: InkWell(
                                     onTap: () {
-                                      // Navigate to chat detail
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => ChatScreen(persona: persona),
+                                        ),
+                                      );
                                     },
                                     child: Padding(
                                       padding: const EdgeInsets.all(16.0),
