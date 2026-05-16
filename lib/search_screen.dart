@@ -89,13 +89,19 @@ class _SearchScreenState extends State<SearchScreen> {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12.0),
                       child: InkWell(
-                        onTap: () {
-                          Navigator.pushReplacement(
+                        onTap: () async {
+                          // Await the chat screen so we stay in the search screen's context
+                          await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => ChatScreen(persona: persona),
                             ),
                           );
+                          // Once the user goes back from the ChatScreen, pop the SearchScreen
+                          // to return to the ChatListScreen which is awaiting this pop.
+                          if (mounted) {
+                            Navigator.pop(context);
+                          }
                         },
                         borderRadius: BorderRadius.circular(24),
                         child: Container(
