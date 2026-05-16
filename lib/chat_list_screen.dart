@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'Provider/chat_provider.dart';
 import 'chat_screen.dart';
+import 'search_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -106,13 +107,16 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(24),
                                   child: InkWell(
-                                    onTap: () {
-                                      Navigator.push(
+                                    onTap: () async {
+                                      await Navigator.push(
                                         context,
                                         MaterialPageRoute(
                                           builder: (context) => ChatScreen(persona: persona),
                                         ),
                                       );
+                                      if (mounted) {
+                                        context.read<ChatProvider>().fetchChattedPresidents();
+                                      }
                                     },
                                     child: Padding(
                                       padding: const EdgeInsets.all(16.0),
@@ -193,7 +197,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {},
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const SearchScreen()),
+          );
+          if (mounted) {
+            context.read<ChatProvider>().fetchChattedPresidents();
+          }
+        },
         child: const Icon(Icons.add, size: 28),
       ),
     );

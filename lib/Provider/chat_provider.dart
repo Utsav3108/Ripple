@@ -9,18 +9,24 @@ class ChatProvider with ChangeNotifier {
   
   List<Persona> _chats = [];
   List<Message> _messages = [];
+  List<Persona> _searchResults = [];
+  
   bool _isLoading = false;
   bool _isMessagesLoading = false;
+  bool _isSearching = false;
   String? _errorMessage;
 
   List<Persona> get chats => _chats;
   List<Message> get messages => _messages;
+  List<Persona> get searchResults => _searchResults;
+  
   bool get isLoading => _isLoading;
   bool get isMessagesLoading => _isMessagesLoading;
+  bool get isSearching => _isSearching;
   String? get errorMessage => _errorMessage;
 
   // For demo purposes, we'll use a hardcoded user_id
-  final int currentUserId = 1;
+  final int currentUserId = -1;
 
   ChatProvider() {
     _initSocket();
@@ -60,6 +66,38 @@ class ChatProvider with ChangeNotifier {
       _errorMessage = e.toString();
     } finally {
       _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> searchPresidents(String query) async {
+    if (query.isEmpty) {
+      _searchResults = [];
+      notifyListeners();
+      return;
+    }
+
+    _isSearching = true;
+    notifyListeners();
+
+    try {
+      final request = Request(
+        url: '/search-presidents/$query',
+        method: HTTPMethod.GET,
+      );
+
+      final response = await _network.performRequest(request);
+
+      if (response.data is List) {
+        _searchResults = (response.data as List)
+            .map((json) => Persona.fromJson(json))
+            .toList();
+      }
+    } catch (e) {
+      print("Error searching presidents: $e");
+      _searchResults = [];
+    } finally {
+      _isSearching = false;
       notifyListeners();
     }
   }
@@ -112,6 +150,11 @@ class ChatProvider with ChangeNotifier {
 
     // Send via socket
     _socketManager.sendMessage(currentUserId, receiverId, text);
+  }
+
+  void clearSearchResults() {
+    _searchResults = [];
+    notifyListeners();
   }
 
   @override
