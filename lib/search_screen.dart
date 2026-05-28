@@ -17,7 +17,7 @@ class _SearchScreenState extends State<SearchScreen> {
   void initState() {
     super.initState();
     _searchController.addListener(() {
-      context.read<ChatProvider>().searchPresidents(_searchController.text);
+      context.read<ChatProvider>().searchPersonas(_searchController.text);
     });
   }
 
@@ -59,7 +59,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 autofocus: true,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
-                  hintText: 'Search for presidents...',
+                  hintText: 'Search for personas...',
                   hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 16),
                   prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.3)),
                   border: InputBorder.none,
@@ -77,7 +77,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
                 if (provider.searchResults.isEmpty && _searchController.text.isNotEmpty) {
                   return const Center(
-                    child: Text('No presidents found', style: TextStyle(color: Colors.white54)),
+                    child: Text('No personas found', style: TextStyle(color: Colors.white54)),
                   );
                 }
 

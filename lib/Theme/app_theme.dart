@@ -7,10 +7,14 @@ class AppTheme {
   static const Color accentColor = Color(0xFFE6F58A);
 
   static ThemeData get darkTheme {
+    final baseTheme = ThemeData(brightness: Brightness.dark);
+    
     return ThemeData(
       brightness: Brightness.dark,
       scaffoldBackgroundColor: pureBlack,
       primaryColor: accentColor,
+      // Setting Poppins as the default font family for the entire app
+      fontFamily: GoogleFonts.poppins().fontFamily,
       colorScheme: const ColorScheme.dark(
         primary: accentColor,
         secondary: accentColor,
@@ -18,23 +22,26 @@ class AppTheme {
         onSurface: Colors.white,
       ),
       textTheme: GoogleFonts.poppinsTextTheme(
-        const TextTheme(
-          displayLarge: TextStyle(color: Colors.white),
-          displayMedium: TextStyle(color: Colors.white),
-          bodyLarge: TextStyle(color: Colors.white),
-          bodyMedium: TextStyle(color: Colors.white70),
+        baseTheme.textTheme.copyWith(
+          displayLarge: const TextStyle(color: Colors.white),
+          displayMedium: const TextStyle(color: Colors.white),
+          bodyLarge: const TextStyle(color: Colors.white),
+          bodyMedium: const TextStyle(color: Colors.white70),
+          titleLarge: const TextStyle(color: Colors.white),
         ),
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: pureBlack,
         elevation: 0,
         scrolledUnderElevation: 0,
-        titleTextStyle: TextStyle(
+        centerTitle: false,
+        titleTextStyle: GoogleFonts.poppins(
           color: Colors.white,
-          fontSize: 28,
-          fontWeight: FontWeight.bold,
+          fontSize: 22,
+          fontWeight: FontWeight.w600,
           letterSpacing: -0.5,
         ),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: accentColor,

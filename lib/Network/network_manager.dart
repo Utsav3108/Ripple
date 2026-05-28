@@ -16,14 +16,12 @@ class Request {
 class Network {
   static String getBaseURL() {
 
-    /*
-
-    Platform.isAndroid
+    final baseUrl = Platform.isAndroid
         ? 'http://10.0.2.2:8000'
         : 'http://localhost:8000';
-    */
 
-    final baseUrl = 'https://nf0np0l7-3400.inc1.devtunnels.ms';
+
+    //final baseUrl = 'https://nf0np0l7-3400.inc1.devtunnels.ms';
     return baseUrl;
   }
 

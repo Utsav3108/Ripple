@@ -47,13 +47,31 @@ class SocketManager {
     socket.onConnectError((err) => print('Connect Error: $err'));
   }
 
-  void sendMessage(int senderId, int receiverId, String text) {
+  void emitJoin(int userId) {
+    socket.emit('join', {'user_id': userId});
+  }
+
+  void emitJoinChallenge(int challengeSessionId) {
+    socket.emit('join_challenge', {'challenge_session_id': challengeSessionId});
+  }
+
+  void sendMessage(int senderId, int receiverId, String text, {int? challengeSessionId}) {
     final payload = {
       "sender_id": senderId,
       "receiver_id": receiverId,
-      "text": text
+      "text": text,
+      if (challengeSessionId != null) "challenge_session_id": challengeSessionId,
     };
     socket.emit('send_message', payload);
+  }
+
+  void emitCompleteChallenge(int challengeSessionId, String status, {String? reason}) {
+    final payload = {
+      "challenge_session_id": challengeSessionId,
+      "status": status,
+      if (reason != null) "reason": reason,
+    };
+    socket.emit('complete_challenge', payload);
   }
 
   void disconnect() {
