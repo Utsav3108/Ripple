@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'Model/model.dart';
+import 'Model/narration_parser.dart';
 import 'Provider/chat_provider.dart';
 
 class ChatScreen extends StatefulWidget {
   final Persona persona;
   final Challenge? challenge;
 
-  const ChatScreen({super.key, required this.persona, this.challenge});
+  const ChatScreen({
+    super.key,
+    required this.persona,
+    this.challenge,
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -17,6 +22,11 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _isSettingUpChallenge = false;
+
+  // Narration state variables
+  String _displayedStorylineText = "";
+  bool _isNarrating = false;
+  String _rawStoryline = "";
 
   @override
   void initState() {
@@ -28,16 +38,46 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _initializeChat() async {
     final chatProvider = context.read<ChatProvider>();
+
+    // Register completion listener for socket events
+    chatProvider.onChallengeCompletedEvent = (data) {
+      print('ChatScreen received challenge_completed socket event: $data');
+      final status = data['challenge_status'] as String? ?? 'lost_blocked';
+      final reason = data['reason'] as String? ?? '';
+      if (mounted) {
+        _showChallengeCompletedOverlay(status, reason);
+      }
+    };
+
     if (widget.challenge != null) {
       setState(() {
         _isSettingUpChallenge = true;
+        _displayedStorylineText = "";
+        _isNarrating = false;
+        _rawStoryline = "";
       });
       try {
         await chatProvider.setupChallenge(
           challengeId: widget.challenge!.id,
           personaId: widget.persona.id,
         );
-        await chatProvider.fetchMessages(widget.persona.id);
+        
+        // Retrieve storyline and trigger narration animation
+        final intro = chatProvider.currentChallengeIntro;
+        if (intro != null && intro['storyline'] != null) {
+          _rawStoryline = intro['storyline'] as String;
+          
+          // Check if conversation history is NOT empty (meaning challenge is resumed)
+          if (chatProvider.messages.isNotEmpty) {
+            setState(() {
+              _isNarrating = false;
+              _displayedStorylineText = NarrationParser.getCleanText(_rawStoryline);
+            });
+          } else {
+            // Fresh challenge, progressive word-by-word animation with pauses
+            _startNarrationAnimation(_rawStoryline);
+          }
+        }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -55,6 +95,58 @@ class _ChatScreenState extends State<ChatScreen> {
       chatProvider.clearChallengeSession();
       await chatProvider.fetchMessages(widget.persona.id);
     }
+  }
+
+  Future<void> _startNarrationAnimation(String raw) async {
+    if (!mounted) return;
+    setState(() {
+      _isNarrating = true;
+      _displayedStorylineText = "";
+    });
+
+    final items = NarrationParser.parse(raw);
+    
+    for (final item in items) {
+      if (!mounted || !_isNarrating) break;
+
+      if (item is NarrationText) {
+        final words = item.text.split(RegExp(r'\s+'));
+        for (final word in words) {
+          if (!mounted || !_isNarrating) break;
+          setState(() {
+            if (_displayedStorylineText.isEmpty) {
+              _displayedStorylineText = word;
+            } else {
+              _displayedStorylineText += " $word";
+            }
+          });
+          await Future.delayed(const Duration(milliseconds: 150)); // Cinematic word delay
+        }
+      } else if (item is NarrationCommand) {
+        if (item.name == 'pause') {
+          final seconds = double.tryParse(item.argument ?? '1.0') ?? 1.0;
+          await Future.delayed(Duration(milliseconds: (seconds * 1000).toInt()));
+        }
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isNarrating = false;
+        // Make sure it displays the clean full text once narration completes normally
+        if (_displayedStorylineText.isEmpty && raw.isNotEmpty) {
+          _displayedStorylineText = NarrationParser.getCleanText(raw);
+        }
+      });
+    }
+  }
+
+  void _skipNarration() {
+    if (!_isNarrating) return;
+    setState(() {
+      _isNarrating = false;
+      _displayedStorylineText = NarrationParser.getCleanText(_rawStoryline);
+    });
   }
 
   void _scrollToBottom() {
@@ -155,11 +247,11 @@ class _ChatScreenState extends State<ChatScreen> {
     await chatProvider.completeChallenge(status, reason: reason);
     
     if (mounted) {
-      _showResultOverlay(status, reason);
+      _showChallengeCompletedOverlay(status, reason);
     }
   }
 
-  void _showResultOverlay(String status, String reason) {
+  void _showChallengeCompletedOverlay(String status, String reason) {
     final isWin = status.startsWith('won');
     final isAbandon = status == 'abandoned';
     
@@ -170,7 +262,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (isWin) {
       statusIcon = status == 'won_objective_completed' ? Icons.check_circle : Icons.emoji_events;
       iconColor = const Color(0xFFE6F58A);
-      title = status == 'won_objective_completed' ? 'OBJECTIVE COMPLETED!' : 'CHALLENGE WON!';
+      title = status == 'won_objective_completed' ? '🎉 Challenge Completed' : '🎉 Challenge Won';
     } else if (isAbandon) {
       statusIcon = Icons.flag;
       iconColor = Colors.white54;
@@ -179,18 +271,18 @@ class _ChatScreenState extends State<ChatScreen> {
       statusIcon = status == 'lost_timeout' ? Icons.timer_outlined : Icons.cancel;
       iconColor = const Color(0xFFFF6B6B);
       
-      if (status == 'lost_timeout') title = 'TIME LIMIT EXCEEDED';
-      if (status == 'lost_rejected') title = 'PROPOSAL REJECTED';
-      if (status == 'lost_blocked') title = 'PRESIDENT BLOCKED YOU';
-      if (status == 'lost_rule_violation') title = 'RULE VIOLATION';
+      if (status == 'lost_timeout') title = '❌ Challenge Failed (Timeout)';
+      if (status == 'lost_rejected') title = '❌ Challenge Failed (Rejected)';
+      if (status == 'lost_blocked') title = '❌ Challenge Failed (Blocked)';
+      if (status == 'lost_rule_violation') title = '❌ Challenge Failed (Violation)';
     }
 
     showGeneralDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withOpacity(0.9),
+      barrierColor: Colors.black.withOpacity(0.95),
       transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, anim1, anim2) {
+      pageBuilder: (dialogContext, anim1, anim2) {
         return WillPopScope(
           onWillPop: () async => false, // Prevent dismissing with back button
           child: Scaffold(
@@ -242,49 +334,20 @@ class _ChatScreenState extends State<ChatScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 32),
-                    // CTA Buttons
-                    Column(
-                      children: [
-                        ElevatedButton(
-                          onPressed: () {
-                            Navigator.pop(context); // Close dialog
-                            _retryChallenge();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFE6F58A),
-                            foregroundColor: Colors.black,
-                            minimumSize: const Size(double.infinity, 50),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            elevation: 0,
-                          ),
-                          child: const Text('Retry Challenge', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        ),
-                        const SizedBox(height: 12),
-                        OutlinedButton(
-                          onPressed: () {
-                            Navigator.pop(context); // Close dialog
-                            Navigator.pop(context); // Exit chat screen
-                          },
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Colors.white24),
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(double.infinity, 50),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          ),
-                          child: const Text('Exit to Challenges', style: TextStyle(fontSize: 15)),
-                        ),
-                        const SizedBox(height: 12),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.pop(context); // Close dialog
-                            _showChallengeDetailsPopup();
-                          },
-                          child: Text(
-                            'View Challenge Context',
-                            style: TextStyle(color: iconColor, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
+                    // OK Button (pops dialog + pops chat screen)
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(dialogContext); // Close dialog
+                        Navigator.pop(context); // Pop chat screen
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: iconColor,
+                        foregroundColor: Colors.black,
+                        minimumSize: const Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        elevation: 0,
+                      ),
+                      child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     ),
                   ],
                 ),
@@ -296,129 +359,99 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void _retryChallenge() {
-    _initializeChat();
-  }
-
-  void _showChallengeDetailsPopup() {
-    final challenge = widget.challenge;
-    if (challenge == null) return;
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1C),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(challenge.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (challenge.context?.setting != null) ...[
-                const Text('SETTING', style: TextStyle(color: Color(0xFFE6F58A), fontSize: 11, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text(challenge.context!.setting, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                const SizedBox(height: 16),
-              ],
-              if (challenge.context?.goal != null) ...[
-                const Text('GOAL', style: TextStyle(color: Color(0xFFE6F58A), fontSize: 11, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text(challenge.context!.goal, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                const SizedBox(height: 16),
-              ],
-              if (challenge.context?.stakes != null) ...[
-                const Text('STAKES', style: TextStyle(color: Color(0xFFE6F58A), fontSize: 11, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text(challenge.context!.stakes, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close', style: TextStyle(color: Color(0xFFE6F58A))),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   Widget _buildStorylineCard(ThemeData theme, Map<String, dynamic> intro) {
-    final storyline = intro['storyline'] as String? ?? '';
     final cta = intro['call_to_action'] as String? ?? '';
 
     return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF151515),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: theme.colorScheme.primary.withOpacity(0.05),
-              blurRadius: 16,
-              spreadRadius: 2,
-            )
-          ],
-        ),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.85,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.auto_stories, color: theme.colorScheme.primary, size: 28),
-            const SizedBox(height: 12),
-            Text(
-              "CHALLENGE STORYLINE",
-              style: TextStyle(
-                color: theme.colorScheme.primary,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
+      child: GestureDetector(
+        onTap: _skipNarration,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF151515),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.primary.withOpacity(0.05),
+                blurRadius: 16,
+                spreadRadius: 2,
+              )
+            ],
+          ),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.85,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _isNarrating ? Icons.record_voice_over : Icons.auto_stories, 
+                color: theme.colorScheme.primary, 
+                size: 28
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              storyline,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            if (cta.isNotEmpty) ...[
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Divider(color: Colors.white24, height: 1),
-              ),
+              const SizedBox(height: 12),
               Text(
-                "OBJECTIVE",
+                "CHALLENGE STORYLINE",
                 style: TextStyle(
-                  color: theme.colorScheme.primary.withOpacity(0.8),
-                  fontSize: 11,
+                  color: theme.colorScheme.primary,
+                  fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
+                  letterSpacing: 1.5,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 12),
               Text(
-                cta,
+                _displayedStorylineText,
                 style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  height: 1.4,
+                  color: Colors.white,
+                  fontSize: 14,
+                  height: 1.5,
                 ),
                 textAlign: TextAlign.center,
               ),
+              if (_isNarrating) ...[
+                const SizedBox(height: 12),
+                Text(
+                  "• • • (tap to skip narration)",
+                  style: TextStyle(
+                    color: theme.colorScheme.primary.withOpacity(0.6),
+                    fontSize: 10,
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              if (cta.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Divider(color: Colors.white24, height: 1),
+                ),
+                Text(
+                  "OBJECTIVE",
+                  style: TextStyle(
+                    color: theme.colorScheme.primary.withOpacity(0.8),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  cta,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

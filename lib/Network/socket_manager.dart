@@ -9,6 +9,9 @@ class SocketManager {
   // Callback when a message is received
   Function(Map<String, dynamic>)? onMessageReceived;
 
+  // Callback when a challenge is completed from server
+  Function(Map<String, dynamic>)? onChallengeCompleted;
+
   void connect(int userId) {
     socket = IO.io(_baseUrl, IO.OptionBuilder()
       .setTransports(['websocket']) // for Flutter or Dart VM
@@ -39,6 +42,26 @@ class SocketManager {
           onMessageReceived!(messageData);
         } catch (e) {
           print('Error parsing received message: $e');
+        }
+      }
+    });
+
+    socket.on('challenge_completed', (data) {
+      print('Received challenge_completed event: $data');
+      if (onChallengeCompleted != null) {
+        try {
+          Map<String, dynamic> completedData;
+          if (data is String) {
+            completedData = jsonDecode(data);
+          } else if (data is Map) {
+            completedData = Map<String, dynamic>.from(data);
+          } else {
+            print('Unexpected challenge_completed data type: ${data.runtimeType}');
+            return;
+          }
+          onChallengeCompleted!(completedData);
+        } catch (e) {
+          print('Error parsing challenge_completed event: $e');
         }
       }
     });

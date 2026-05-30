@@ -47,6 +47,9 @@ class ChatProvider with ChangeNotifier {
   // For demo purposes, we'll use a hardcoded user_id
   final int currentUserId = 1;
 
+  // Callback to propagate challenge_completed event to screen listener
+  Function(Map<String, dynamic>)? onChallengeCompletedEvent;
+
   ChatProvider() {
     _initSocket();
   }
@@ -59,6 +62,11 @@ class ChatProvider with ChangeNotifier {
       if (!_messages.any((m) => m.id == newMessage.id && m.id != 0)) {
         _messages.add(newMessage);
         notifyListeners();
+      }
+    };
+    _socketManager.onChallengeCompleted = (data) {
+      if (onChallengeCompletedEvent != null) {
+        onChallengeCompletedEvent!(data);
       }
     };
   }
@@ -223,6 +231,13 @@ class ChatProvider with ChangeNotifier {
   }) async {
     _isLoading = true;
     _errorMessage = null;
+    
+    // Wipe stale challenge session variables immediately on entry
+    _currentChallengeSessionId = null;
+    _currentChallengeIntro = null;
+    _currentChallengeStatus = null;
+    _currentChallengeDuration = null;
+    _messages = [];
     notifyListeners();
 
     try {
@@ -238,12 +253,30 @@ class ChatProvider with ChangeNotifier {
 
       final response = await _network.performRequest(request);
 
-      if (response.data is Map<String, dynamic>) {
-        final data = response.data as Map<String, dynamic>;
-        _currentChallengeSessionId = data['challenge_session_id'];
+      if (response.data is Map) {
+        final data = Map<String, dynamic>.from(response.data as Map);
+        
+        final rawSessionId = data['challenge_session_id'];
+        _currentChallengeSessionId = rawSessionId is int 
+            ? rawSessionId 
+            : (rawSessionId != null ? int.tryParse(rawSessionId.toString()) : null);
+
         _currentChallengeIntro = data['intro'] is Map ? Map<String, dynamic>.from(data['intro']) : null;
-        _currentChallengeStatus = data['status'];
-        _currentChallengeDuration = data['total_duration_minutes'];
+        _currentChallengeStatus = data['status']?.toString();
+        
+        final rawDuration = data['total_duration_minutes'];
+        _currentChallengeDuration = rawDuration is int 
+            ? rawDuration 
+            : (rawDuration != null ? int.tryParse(rawDuration.toString()) : null);
+
+        // Parse conversation history from setup challenge directly
+        if (data['conversation_history'] is List) {
+          _messages = (data['conversation_history'] as List)
+              .map((json) => Message.fromJson(Map<String, dynamic>.from(json as Map), currentUserId))
+              .toList();
+        } else {
+          _messages = [];
+        }
 
         if (_currentChallengeSessionId != null) {
           // Socket order: Setup API, Emit Join, Emit Join Challenge
@@ -259,6 +292,26 @@ class ChatProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<List<ChallengeAttempt>> fetchChallengeAttempts(String challengeId) async {
+    try {
+      final request = Request(
+        url: '/challenge-attempts/$challengeId',
+        method: HTTPMethod.GET,
+      );
+
+      final response = await _network.performRequest(request);
+
+      if (response.data is List) {
+        return (response.data as List)
+            .map((json) => ChallengeAttempt.fromJson(json))
+            .toList();
+      }
+    } catch (e) {
+      print("Error fetching challenge attempts: $e");
+    }
+    return [];
   }
 
   Future<void> completeChallenge(String status, {String? reason}) async {

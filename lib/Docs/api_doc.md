@@ -21,9 +21,9 @@ This document describes the main REST API endpoints for the WhatsApp mobile app 
   - `limit` (int, optional, default=50): Number of persona to return
   - `offset` (int, optional, default=0): Pagination offset
 - **Response:**
-  - 200 OK: List of President objects
+  - 200 OK: List of Persona objects
 
-#### President Object
+#### Persona Object
 - `id` (int)
 - `name` (string)
 - `desc` (string)
@@ -37,7 +37,7 @@ This document describes the main REST API endpoints for the WhatsApp mobile app 
 - **Path Parameter:**
   - `query` (string): Search term
 - **Response:**
-  - 200 OK: List of President objects
+  - 200 OK: List of Persona objects
 
 ---
 
@@ -47,7 +47,7 @@ This document describes the main REST API endpoints for the WhatsApp mobile app 
 - **Path Parameter:**
   - `user_id` (int): User ID
 - **Response:**
-  - 200 OK: List of President objects
+  - 200 OK: List of Persona objects
 
 ---
 
@@ -116,63 +116,28 @@ This document describes the main REST API endpoints for the WhatsApp mobile app 
 
 ### 8. Setup Challenge (Start/Resume)
 - **POST /setup_challenge**
-- **Description:** Start or resume a challenge for a user with a selected president. If a session exists, resumes it; otherwise, assigns president and generates storyline.
+- **Description:** Start or resume a challenge for a user with a selected Persona. If a session exists, resumes it; otherwise, assigns Persona and generates storyline.
 - **Request Body:** ChallengeSetup object
 - **Response:**
   - 200 OK: ChallengeSetupResponse object
 
 #### ChallengeSetup Object
 - `challenge_id` (string): The challenge to start
-- `persona_id` (int, optional): The president to assign
+- `persona_id` (int, optional): The Persona to assign
 - `user_id` (int): The user starting the challenge
 
+
 #### ChallengeSetupResponse Object
-- `message` (string): Status message
-- `challenge_session_id` (int, optional): Session ID
-- `intro` (object, optional): Storyline object
-- `status` (string, optional): ChallengeResult status
-- `total_duration_minutes` (int, optional): Duration
-
-# ChallengeResult Enum
-
-Represents the possible outcomes or states of a challenge.
-
-```python
-class ChallengeResult(str, Enum):
-
-    # -----------------------------
-    # WIN CONDITIONS
-    # -----------------------------
-    WON = "won"
-
-    # Persona agreed to challenge objective
-    WON_OBJECTIVE_COMPLETED = "won_objective_completed"
-
-    # -----------------------------
-    # LOSE CONDITIONS
-    # -----------------------------
-    LOST_TIMEOUT = "lost_timeout"
-
-    # Persona explicitly rejected objective
-    LOST_REJECTED = "lost_rejected"
-
-    # Persona got angry / blocked user
-    LOST_BLOCKED = "lost_blocked"
-
-    # User violated challenge rules
-    LOST_RULE_VIOLATION = "lost_rule_violation"
-
-    # -----------------------------
-    # OTHER STATES
-    # -----------------------------
-    ABANDONED = "abandoned"
-
-    ACTIVE = "active"
-```
+- `message` (string): message
+- `challenge_session_id` (int, optional): Session ID for the challenge
+- `intro` (object, optional): StorylineResponse object
+- `status` (string, optional): ChallengeResult status, see table below.
+- `total_duration_minutes` (int, optional): Total duration of the challenge session in minutes
+- `conversation_history` (array of Message objects, optional): The full conversation history for the current challenge session. Each item is a Message object as described below.
 
 ---
 
-## Values
+## ChallengeResult Values
 
 | Value                     | Description                                             |
 | ------------------------- | ------------------------------------------------------- |
@@ -195,9 +160,17 @@ class ChallengeResult(str, Enum):
 * `ABANDONED` is neither a win nor a loss state.
 
 
-#### Storyline Object
-- `storyline` (string): The storyline
-- `call_to_action` (string): The call to action
+#### StorylineResponse Object
+- `storyline` (string): The intro story with dynamic pauses like [pause: 1.0]
+- `call_to_action` (string): A clear, short instruction telling the user what to do next
+
+#### Message Object
+- `id` (int): Message ID
+- `sender_id` (int): Sender user ID
+- `receiver_id` (int): Receiver user ID
+- `text` (string): Message text
+- `image_object_name` (string, optional): Name of the image object if present
+- `challenge_session_id` (int, optional): Challenge session ID if message is part of a challenge
 
 ### 9. Get Challenge Attempts
 - **GET /challenge-attempts/{challenge_id}**
@@ -221,18 +194,36 @@ class ChallengeResult(str, Enum):
 ---
 
 
+
 ## Real-Time Messaging (Socket.IO)
 - **Socket.IO endpoint:** `/socket.io`
-- Used for real-time messaging. Main events:
+- Used for real-time messaging and challenge session management. Main events:
+  - `connect`: Client connects to the server
+  - `disconnect`: Client disconnects
   - `join`: Register a user session (`{ user_id }`)
-  - `send_message`: Send a chat message (`{ sender_id, receiver_id, text }`)
+  - `join_challenge`: Join a challenge room (`{ challenge_session_id }`)
+  - `send_message`: Send a chat message (`{ sender_id, receiver_id, text, challenge_session_id, image_object_name? }`)
   - `receive_message`: Receive messages (including AI responses)
-- See `app/socketio_server.py` for event logic.
+  - `challenge_update`: (Emitted by server) Notifies clients in a challenge room about challenge status updates. See ChallengeCompletion object below.
+- Rooms are used for challenge sessions: `challenge:<challenge_session_id>`
+- All events are asynchronous. See `app/socketio_server.py` and `app/socketio_server_events.md` for full event details and payloads.
 
 ---
 
 
+
+---
+
+### ChallengeCompletion Object (for challenge_update event)
+- `reason` (string, optional): Reason for challenge completion or status change
+- `challenge_status` (string): Status of the challenge (e.g., "COMPLETED", "FAILED", "ACTIVE")
+- `challenge_session_id` (int): The session ID for the challenge
+- `user_id` (int): The user who completed or is involved in the challenge
+- `challenge_id` (int): The challenge ID
+
+---
+
 ## Notes
 - All endpoints return JSON responses.
 - CORS is enabled for all origins.
-- For authentication and additional endpoints, refer to the backend source code.
+- For authentication and additional endpoints, see this documentation for all request and response formats.

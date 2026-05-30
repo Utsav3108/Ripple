@@ -13,10 +13,12 @@ class Persona {
 
   factory Persona.fromJson(Map<String, dynamic> json) {
     return Persona(
-      id: json['id'],
-      name: json['name'],
-      desc: json['desc'],
-      imageUrl: json['image_url'],
+      id: json['id'] is int 
+          ? json['id'] as int 
+          : (int.tryParse(json['id']?.toString() ?? '') ?? 0),
+      name: json['name']?.toString() ?? '',
+      desc: json['desc']?.toString() ?? '',
+      imageUrl: json['image_url']?.toString(),
     );
   }
 
@@ -50,16 +52,25 @@ class Message {
   });
 
   factory Message.fromJson(Map<String, dynamic> json, int currentUserId) {
+    final parsedId = json['id'] is int 
+        ? json['id'] as int 
+        : (int.tryParse(json['id']?.toString() ?? '') ?? 0);
+    final parsedSenderId = json['sender_id'] is int 
+        ? json['sender_id'] as int 
+        : (int.tryParse(json['sender_id']?.toString() ?? '') ?? 0);
+    final parsedReceiverId = json['receiver_id'] is int 
+        ? json['receiver_id'] as int 
+        : (int.tryParse(json['receiver_id']?.toString() ?? '') ?? 0);
     return Message(
-      id: json['id'],
-      senderId: json['sender_id'],
-      receiverId: json['receiver_id'],
-      text: json['text'],
+      id: parsedId,
+      senderId: parsedSenderId,
+      receiverId: parsedReceiverId,
+      text: json['text']?.toString() ?? '',
       timestamp: json['timestamp'] != null 
           ? DateTime.parse(json['timestamp']) 
           : DateTime.now(),
-      imageFileName: json['image_object_name'],
-      isUser: json['sender_id'] == currentUserId,
+      imageFileName: json['image_object_name']?.toString(),
+      isUser: parsedSenderId == currentUserId,
     );
   }
 
@@ -97,17 +108,29 @@ class Challenge {
 
   factory Challenge.fromJson(Map<String, dynamic> json) {
     return Challenge(
-      id: json['id'].toString(),
-      title: json['title'] ?? '',
-      subtitle: json['subtitle'],
-      description: json['description'],
-      shortDescription: json['short_description'],
-      categories: json['categories'] != null ? List<String>.from(json['categories']) : null,
-      suggestedPersonas: json['suggested_personas'] != null ? List<int>.from(json['suggested_personas']) : null,
-      difficulty: json['difficulty'],
-      imageUrl: json['image_url'],
-      selectedPersonaId: json['selected_persona_id'] != null ? json['selected_persona_id'] as int : null,
-      context: json['context'] != null ? ChallengeContext.fromJson(json['context']) : null,
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      subtitle: json['subtitle']?.toString(),
+      description: json['description']?.toString(),
+      shortDescription: json['short_description']?.toString(),
+      categories: json['categories'] != null 
+          ? List<String>.from((json['categories'] as List).map((e) => e.toString())) 
+          : null,
+      suggestedPersonas: json['suggested_personas'] != null 
+          ? List<int>.from((json['suggested_personas'] as List)
+              .map((e) => e is int ? e : (int.tryParse(e.toString()) ?? 0))
+              .where((e) => e != 0)) 
+          : null,
+      difficulty: json['difficulty']?.toString(),
+      imageUrl: json['image_url']?.toString(),
+      selectedPersonaId: json['selected_persona_id'] is int 
+          ? json['selected_persona_id'] as int 
+          : (json['selected_persona_id'] != null 
+              ? int.tryParse(json['selected_persona_id'].toString()) 
+              : null),
+      context: json['context'] is Map 
+          ? ChallengeContext.fromJson(Map<String, dynamic>.from(json['context'] as Map)) 
+          : null,
     );
   }
 }
@@ -137,6 +160,47 @@ class ChallengeContext {
       goal: json['goal'] ?? '',
       stakes: json['stakes'] ?? '',
       platform: json['platform'] ?? '',
+    );
+  }
+}
+
+class ChallengeAttempt {
+  final String id;
+  final String challengeId;
+  final int userId;
+  final int personaId;
+  final bool won;
+  final int timeTakenSeconds;
+  final int attemptNumber;
+  final DateTime createdAt;
+
+  ChallengeAttempt({
+    required this.id,
+    required this.challengeId,
+    required this.userId,
+    required this.personaId,
+    required this.won,
+    required this.timeTakenSeconds,
+    required this.attemptNumber,
+    required this.createdAt,
+  });
+
+  factory ChallengeAttempt.fromJson(Map<String, dynamic> json) {
+    return ChallengeAttempt(
+      id: json['id']?.toString() ?? '',
+      challengeId: json['challenge_id']?.toString() ?? '',
+      userId: json['user_id'] is int ? json['user_id'] as int : 0,
+      personaId: json['persona_id'] is int ? json['persona_id'] as int : 0,
+      won: json['won'] is bool ? json['won'] as bool : false,
+      timeTakenSeconds: json['time_taken_seconds'] is int 
+          ? json['time_taken_seconds'] as int 
+          : (json['time_taken_seconds'] is double 
+              ? (json['time_taken_seconds'] as double).toInt() 
+              : 0),
+      attemptNumber: json['attempt_number'] is int ? json['attempt_number'] as int : 0,
+      createdAt: json['created_at'] != null 
+          ? DateTime.parse(json['created_at']) 
+          : DateTime.now(),
     );
   }
 }
