@@ -7,11 +7,13 @@ import 'Provider/chat_provider.dart';
 class ChatScreen extends StatefulWidget {
   final Persona persona;
   final Challenge? challenge;
+  final int? attemptSessionId;
 
   const ChatScreen({
     super.key,
     required this.persona,
     this.challenge,
+    this.attemptSessionId,
   });
 
   @override
@@ -39,15 +41,19 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _initializeChat() async {
     final chatProvider = context.read<ChatProvider>();
 
-    // Register completion listener for socket events
-    chatProvider.onChallengeCompletedEvent = (data) {
-      print('ChatScreen received challenge_completed socket event: $data');
-      final status = data['challenge_status'] as String? ?? 'lost_blocked';
-      final reason = data['reason'] as String? ?? '';
-      if (mounted) {
-        _showChallengeCompletedOverlay(status, reason);
-      }
-    };
+    // Register completion listener for socket events only if NOT a historical attempt review
+    if (widget.attemptSessionId == null) {
+      chatProvider.onChallengeCompletedEvent = (data) {
+        print('ChatScreen received challenge_completed socket event: $data');
+        final status = data['challenge_status'] as String? ?? 'lost_blocked';
+        final reason = data['reason'] as String? ?? '';
+        if (mounted) {
+          _showChallengeCompletedOverlay(status, reason);
+        }
+      };
+    } else {
+      chatProvider.onChallengeCompletedEvent = null;
+    }
 
     if (widget.challenge != null) {
       setState(() {
@@ -60,6 +66,7 @@ class _ChatScreenState extends State<ChatScreen> {
         await chatProvider.setupChallenge(
           challengeId: widget.challenge!.id,
           personaId: widget.persona.id,
+          attemptSessionId: widget.attemptSessionId,
         );
         
         // Retrieve storyline and trigger narration animation
@@ -491,8 +498,14 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   if (isChallengeMode)
                     Text(
-                      'Strategy Challenge Active',
-                      style: TextStyle(color: accentColor, fontSize: 11, fontWeight: FontWeight.w600),
+                      widget.attemptSessionId != null 
+                          ? 'Challenge History (Read Only)'
+                          : 'Strategy Challenge Active',
+                      style: TextStyle(
+                        color: widget.attemptSessionId != null ? Colors.white38 : accentColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                 ],
               ),
@@ -500,7 +513,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
-          if (isChallengeMode && !_isSettingUpChallenge)
+          if (isChallengeMode && !_isSettingUpChallenge && widget.attemptSessionId == null)
             IconButton(
               icon: Icon(Icons.flag_outlined, color: accentColor),
               tooltip: 'Complete/Simulate Challenge',
@@ -590,47 +603,154 @@ class _ChatScreenState extends State<ChatScreen> {
                     },
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  color: Colors.black,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1A1A1A),
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          child: TextField(
-                            controller: _messageController,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(
-                              hintText: 'Type a message...',
-                              hintStyle: TextStyle(color: Colors.white54),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                if (widget.attemptSessionId != null)
+                  _buildReadOnlyResultBanner(theme, context.watch<ChatProvider>().currentChallengeStatus)
+                else
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    color: Colors.black,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1A1A1A),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: TextField(
+                              controller: _messageController,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: const InputDecoration(
+                                hintText: 'Type a message...',
+                                hintStyle: TextStyle(color: Colors.white54),
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: () {
-                          if (_messageController.text.isNotEmpty) {
-                            context.read<ChatProvider>().sendMessage(
-                                  widget.persona.id,
-                                  _messageController.text,
-                                );
-                            _messageController.clear();
-                          }
-                        },
-                        icon: Icon(Icons.send, color: accentColor),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: () {
+                            if (_messageController.text.isNotEmpty) {
+                              context.read<ChatProvider>().sendMessage(
+                                    widget.persona.id,
+                                    _messageController.text,
+                                  );
+                              _messageController.clear();
+                            }
+                          },
+                          icon: Icon(Icons.send, color: accentColor),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
               ],
             ),
+    );
+  }
+
+  Widget _buildReadOnlyResultBanner(ThemeData theme, String? status) {
+    final cleanStatus = status?.toLowerCase() ?? 'abandoned';
+    final isWin = cleanStatus.startsWith('won') || cleanStatus == 'won_objective_completed';
+    
+    final cardColor = const Color(0xFF141414);
+    
+    // Result icon, title, description mappings
+    IconData icon;
+    Color statusColor;
+    String title;
+    String description;
+
+    if (isWin) {
+      icon = Icons.emoji_events;
+      statusColor = const Color(0xFFE6F58A); // Premium Lime color
+      title = "🏆 Challenge Won";
+      description = cleanStatus == 'won_objective_completed' 
+          ? "Persona agreed to the objective." 
+          : "Goal achieved successfully!";
+    } else if (cleanStatus == 'abandoned') {
+      icon = Icons.flag;
+      statusColor = Colors.white54;
+      title = "🏳 Challenge Abandoned";
+      description = "Strategic session was called off.";
+    } else {
+      icon = Icons.cancel;
+      statusColor = const Color(0xFFFF6B6B); // Coral/Red color
+      title = "❌ Challenge Failed";
+      
+      if (cleanStatus == 'lost_timeout') {
+        description = "Time limit exceeded during talks.";
+      } else if (cleanStatus == 'lost_rejected') {
+        description = "Persona rejected the request.";
+      } else if (cleanStatus == 'lost_blocked') {
+        description = "Persona became offended and blocked you.";
+      } else if (cleanStatus == 'lost_rule_violation') {
+        description = "Rules or protocols were violated.";
+      } else {
+        description = "Challenge target was not reached.";
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        border: Border(
+          top: BorderSide(color: statusColor.withOpacity(0.3), width: 1.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withOpacity(0.05),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          )
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.08),
+                shape: BoxShape.circle,
+                border: Border.all(color: statusColor.withOpacity(0.2), width: 1),
+              ),
+              child: Icon(icon, size: 28, color: statusColor),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

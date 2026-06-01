@@ -228,6 +228,7 @@ class ChatProvider with ChangeNotifier {
   Future<void> setupChallenge({
     required String challengeId,
     required int personaId,
+    int? attemptSessionId,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -248,6 +249,7 @@ class ChatProvider with ChangeNotifier {
           'challenge_id': challengeId,
           'persona_id': personaId,
           'user_id': currentUserId,
+          if (attemptSessionId != null) 'attempt_session_id': attemptSessionId,
         },
       );
 
@@ -278,7 +280,8 @@ class ChatProvider with ChangeNotifier {
           _messages = [];
         }
 
-        if (_currentChallengeSessionId != null) {
+        // Bypassing socket connections for read-only historical attempt viewers
+        if (_currentChallengeSessionId != null && attemptSessionId == null) {
           // Socket order: Setup API, Emit Join, Emit Join Challenge
           _socketManager.emitJoin(currentUserId);
           _socketManager.emitJoinChallenge(_currentChallengeSessionId!);

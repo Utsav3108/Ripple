@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'Model/model.dart';
 import 'Provider/chat_provider.dart';
+import 'chat_screen.dart';
 
 class ChallengeStatsScreen extends StatefulWidget {
   final Challenge challenge;
@@ -266,61 +267,83 @@ class _ChallengeStatsScreenState extends State<ChallengeStatsScreen> {
                           final persona = provider.getPersonaById(attempt.personaId);
                           final personaName = persona?.name ?? "Persona #${attempt.personaId}";
 
+                           final resolvedPersona = persona ?? Persona(
+                            id: attempt.personaId,
+                            name: personaName,
+                            desc: 'Diplomatic strategic candidate',
+                          );
+
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 12.0),
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: cardColor,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: Colors.white10),
-                              ),
-                              child: Row(
-                                children: [
-                                  // Result icon
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: attempt.won 
-                                          ? accentColor.withOpacity(0.1) 
-                                          : const Color(0xFFFF6B6B).withOpacity(0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      attempt.won ? Icons.emoji_events : Icons.cancel,
-                                      color: attempt.won ? accentColor : const Color(0xFFFF6B6B),
-                                      size: 20,
+                            child: InkWell(
+                              onTap: () {
+                                final sessionId = attempt.challengeSessionId ?? (int.tryParse(attempt.id) ?? 0);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ChatScreen(
+                                      persona: resolvedPersona,
+                                      challenge: widget.challenge,
+                                      attemptSessionId: sessionId,
                                     ),
                                   ),
-                                  const SizedBox(width: 16),
-                                  // Attempt text details
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          "Attempt #${attempt.attemptNumber}",
-                                          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          "Persona: $personaName",
-                                          style: const TextStyle(color: Colors.white70, fontSize: 13),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          "Time taken: ${_formatTime(attempt.timeTakenSeconds)}",
-                                          style: const TextStyle(color: Colors.white54, fontSize: 11),
-                                        ),
-                                      ],
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: cardColor,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.white10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    // Result icon
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: attempt.won 
+                                            ? accentColor.withOpacity(0.1) 
+                                            : const Color(0xFFFF6B6B).withOpacity(0.1),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        attempt.won ? Icons.emoji_events : Icons.cancel,
+                                        color: attempt.won ? accentColor : const Color(0xFFFF6B6B),
+                                        size: 20,
+                                      ),
                                     ),
-                                  ),
-                                  // Date
-                                  Text(
-                                    _formatDate(attempt.createdAt),
-                                    style: const TextStyle(color: Colors.white38, fontSize: 11),
-                                  ),
-                                ],
+                                    const SizedBox(width: 16),
+                                    // Attempt text details
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            "Attempt #${attempt.attemptNumber}",
+                                            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            "Persona: $personaName",
+                                            style: const TextStyle(color: Colors.white70, fontSize: 13),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            "Time taken: ${_formatTime(attempt.timeTakenSeconds)}",
+                                            style: const TextStyle(color: Colors.white54, fontSize: 11),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    // Date
+                                    Text(
+                                      _formatDate(attempt.createdAt),
+                                      style: const TextStyle(color: Colors.white38, fontSize: 11),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           );

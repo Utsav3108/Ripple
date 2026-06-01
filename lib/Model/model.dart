@@ -173,6 +173,7 @@ class ChallengeAttempt {
   final int timeTakenSeconds;
   final int attemptNumber;
   final DateTime createdAt;
+  final int? challengeSessionId;
 
   ChallengeAttempt({
     required this.id,
@@ -183,9 +184,14 @@ class ChallengeAttempt {
     required this.timeTakenSeconds,
     required this.attemptNumber,
     required this.createdAt,
+    this.challengeSessionId,
   });
 
   factory ChallengeAttempt.fromJson(Map<String, dynamic> json) {
+    final rawSessionId = json['challenge_session_id'] ?? json['id'];
+    final parsedSessionId = rawSessionId is int 
+        ? rawSessionId 
+        : (rawSessionId != null ? int.tryParse(rawSessionId.toString()) : null);
     return ChallengeAttempt(
       id: json['id']?.toString() ?? '',
       challengeId: json['challenge_id']?.toString() ?? '',
@@ -201,6 +207,7 @@ class ChallengeAttempt {
       createdAt: json['created_at'] != null 
           ? DateTime.parse(json['created_at']) 
           : DateTime.now(),
+      challengeSessionId: parsedSessionId,
     );
   }
 }
