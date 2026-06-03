@@ -16,12 +16,12 @@ class Request {
 class Network {
   static String getBaseURL() {
 
-    // final baseUrl = Platform.isAndroid
-    //     ? 'http://10.0.2.2:8000'
-    //     : 'http://localhost:8000';
+    final baseUrl = Platform.isAndroid
+        ? 'http://10.0.2.2:8000'
+        : 'http://localhost:8000';
 
 
-    final baseUrl = 'https://nf0np0l7-8000.inc1.devtunnels.ms';
+    //final baseUrl = 'https://nf0np0l7-8000.inc1.devtunnels.ms';
     return baseUrl;
   }
 
@@ -62,6 +62,7 @@ class Network {
 
   _log(Request request, Response res) {
     print("Response for ${request.url}");
+    print("body: ${request.body}");
     print(res.data);
   }
 

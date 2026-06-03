@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'Model/model.dart';
 import 'Model/narration_parser.dart';
 import 'Provider/chat_provider.dart';
@@ -477,10 +478,16 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundImage: widget.persona.imageUrl != null
-                  ? NetworkImage(widget.persona.imageUrl!)
+              backgroundColor: const Color(0xFF2A2A2A),
+              backgroundImage: widget.persona.imageUrl != null && widget.persona.imageUrl!.isNotEmpty
+                  ? CachedNetworkImageProvider(widget.persona.imageUrl!)
                   : null,
-              child: widget.persona.imageUrl == null
+              onBackgroundImageError: widget.persona.imageUrl != null && widget.persona.imageUrl!.isNotEmpty
+                  ? (exception, stackTrace) {
+                      print("Exception caught while fetching image for ${widget.persona.name}: $exception");
+                    }
+                  : null,
+              child: widget.persona.imageUrl == null || widget.persona.imageUrl!.isEmpty
                   ? Text(widget.persona.name[0], style: const TextStyle(fontSize: 14))
                   : null,
             ),

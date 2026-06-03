@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'Provider/chat_provider.dart';
 import 'chat_screen.dart';
 
@@ -115,10 +116,15 @@ class _SearchScreenState extends State<SearchScreen> {
                               CircleAvatar(
                                 radius: 24,
                                 backgroundColor: const Color(0xFF2A2A2A),
-                                backgroundImage: persona.imageUrl != null
-                                    ? NetworkImage(persona.imageUrl!)
+                                backgroundImage: persona.imageUrl != null && persona.imageUrl!.isNotEmpty
+                                    ? CachedNetworkImageProvider(persona.imageUrl!)
                                     : null,
-                                child: persona.imageUrl == null
+                                onBackgroundImageError: persona.imageUrl != null && persona.imageUrl!.isNotEmpty
+                                    ? (exception, stackTrace) {
+                                        print("Exception caught while fetching image for ${persona.name}: $exception");
+                                      }
+                                    : null,
+                                child: persona.imageUrl == null || persona.imageUrl!.isEmpty
                                     ? Text(persona.name[0])
                                     : null,
                               ),
