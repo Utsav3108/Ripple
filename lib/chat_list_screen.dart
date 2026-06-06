@@ -288,7 +288,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               },
               borderRadius: BorderRadius.circular(20),
               child: Container(
-                height: 140,
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: cardColor,
                   borderRadius: BorderRadius.circular(20),
@@ -296,82 +296,60 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     BoxShadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 4)),
                   ],
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Image Section (35%)
-                    ClipRRect(
-                      borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
-                      child: SizedBox(
-                        width: MediaQuery.of(context).size.width * 0.35,
-                        height: double.infinity,
-                        child: challenge.imageUrl != null
-                            ? Image.network(challenge.imageUrl!, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: const Color(0xFF2A2A2A), child: const Icon(Icons.landscape, color: Colors.white24)))
-                            : Container(color: const Color(0xFF2A2A2A), child: const Icon(Icons.landscape, color: Colors.white24)),
-                      ),
+                    Text(
+                      challenge.title,
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    // Text Section
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              challenge.title,
-                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                    const SizedBox(height: 8),
+                    Text(
+                      challenge.context?.goal ?? "No description available",
+                      style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "Tap to play",
+                          style: TextStyle(color: Colors.white38, fontSize: 11),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            // Navigate to Challenge Stats Screen
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChallengeStatsScreen(challenge: challenge),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: accentColor.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: accentColor.withOpacity(0.3), width: 1),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              challenge.context?.goal ?? "No description available",
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            child: Row(
                               children: [
-                                const Text(
-                                  "Tap to play",
-                                  style: TextStyle(color: Colors.white38, fontSize: 11),
-                                ),
-                                GestureDetector(
-                                  onTap: () {
-                                    // Navigate to Challenge Stats Screen
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => ChallengeStatsScreen(challenge: challenge),
-                                      ),
-                                    );
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: accentColor.withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: accentColor.withOpacity(0.3), width: 1),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.bar_chart, size: 12, color: accentColor),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          "View Stats",
-                                          style: TextStyle(color: accentColor, fontSize: 11, fontWeight: FontWeight.bold),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                Icon(Icons.bar_chart, size: 12, color: accentColor),
+                                const SizedBox(width: 4),
+                                Text(
+                                  "View Stats",
+                                  style: TextStyle(color: accentColor, fontSize: 11, fontWeight: FontWeight.bold),
                                 ),
                               ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                 ),

@@ -18,6 +18,7 @@ class ChatProvider with ChangeNotifier {
   bool _isSearching = false;
   bool _isChallengesLoading = false;
   String? _errorMessage;
+  int? _activePersonaId;
 
   List<Persona> get chats => _chats;
   List<Message> get messages => _messages;
@@ -58,10 +59,29 @@ class ChatProvider with ChangeNotifier {
     _socketManager.connect(currentUserId);
     _socketManager.onMessageReceived = (data) {
       final newMessage = Message.fromJson(data, currentUserId);
-      // Check if message already exists (to avoid duplicates if server broadcasts back to sender)
-      if (!_messages.any((m) => m.id == newMessage.id && m.id != 0)) {
-        _messages.add(newMessage);
-        notifyListeners();
+      
+      bool isRelevant = false;
+      if (_currentChallengeSessionId != null) {
+        // In challenge mode, check if challenge session matches
+        final msgSessionId = data['challenge_session_id'] ?? data['challenge_session']?['id'];
+        if (msgSessionId != null && msgSessionId.toString() == _currentChallengeSessionId.toString()) {
+          isRelevant = true;
+        }
+      } else {
+        // In normal mode, check if the message is between currentUserId and _activePersonaId
+        if (_activePersonaId != null && 
+            ((newMessage.senderId == currentUserId && newMessage.receiverId == _activePersonaId) ||
+             (newMessage.senderId == _activePersonaId && newMessage.receiverId == currentUserId))) {
+          isRelevant = true;
+        }
+      }
+
+      if (isRelevant) {
+        // Check if message already exists (to avoid duplicates if server broadcasts back to sender)
+        if (!_messages.any((m) => m.id == newMessage.id && m.id != 0)) {
+          _messages.add(newMessage);
+          notifyListeners();
+        }
       }
     };
     _socketManager.onChallengeCompleted = (data) {
@@ -157,6 +177,8 @@ class ChatProvider with ChangeNotifier {
   }
 
   Future<void> fetchMessages(int receiverId) async {
+    _activePersonaId = receiverId;
+    _socketManager.emitJoin(receiverId); // Join persona's socket room
     _isMessagesLoading = true;
     _messages = [];
     notifyListeners();
@@ -230,6 +252,7 @@ class ChatProvider with ChangeNotifier {
     required int personaId,
     int? attemptSessionId,
   }) async {
+    _activePersonaId = personaId;
     _isLoading = true;
     _errorMessage = null;
     
@@ -338,6 +361,7 @@ class ChatProvider with ChangeNotifier {
     _currentChallengeIntro = null;
     _currentChallengeStatus = null;
     _currentChallengeDuration = null;
+    _activePersonaId = null;
     notifyListeners();
   }
 

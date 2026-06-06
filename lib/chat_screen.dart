@@ -25,38 +25,83 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _isSettingUpChallenge = false;
+  ChatProvider? _chatProvider;
 
   // Narration state variables
   String _displayedStorylineText = "";
   bool _isNarrating = false;
   String _rawStoryline = "";
 
+  late Challenge? _activeChallenge;
+  late Persona _activePersona;
+  bool _skipNarrationForReplay = false;
+  bool _showChallengeSelectionOverlay = false;
+  bool _showPersonaSelectionOverlay = false;
+  Challenge? _selectedNextChallenge;
+  bool _isLoadingNextChallenges = false;
+
   @override
   void initState() {
     super.initState();
+    _activeChallenge = widget.challenge;
+    _activePersona = widget.persona;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeChat();
     });
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _chatProvider = context.read<ChatProvider>();
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    // Safely clear challenge session and socket callbacks on screen disposal
+    if (_chatProvider != null) {
+      _chatProvider!.clearChallengeSession();
+      _chatProvider!.onChallengeCompletedEvent = null;
+    }
+    super.dispose();
+  }
+
   Future<void> _initializeChat() async {
-    final chatProvider = context.read<ChatProvider>();
+    if (!mounted) return;
+
+    final isHistoryMode = widget.attemptSessionId != null;
+    print("DEBUG: ChatScreen Initializing...");
+    print("DEBUG: isHistoryMode = $isHistoryMode");
+    print("DEBUG: attemptSessionId = ${widget.attemptSessionId}");
+    print("DEBUG: challengeId = ${_activeChallenge?.id}");
+    print("DEBUG: personaId = ${_activePersona.id}");
+
+    final provider = _chatProvider!;
 
     // Register completion listener for socket events only if NOT a historical attempt review
     if (widget.attemptSessionId == null) {
-      chatProvider.onChallengeCompletedEvent = (data) {
+      provider.onChallengeCompletedEvent = (data) async {
         print('ChatScreen received challenge_completed socket event: $data');
         final status = data['challenge_status'] as String? ?? 'lost_blocked';
-        final reason = data['reason'] as String? ?? '';
+        final reason = data['result_reason'] as String? ?? data['reason'] as String? ?? '';
+        
+        int attemptCount = 1;
+        if (_activeChallenge != null) {
+          final attempts = await provider.fetchChallengeAttempts(_activeChallenge!.id);
+          attemptCount = attempts.isNotEmpty ? attempts.length : 1;
+        }
+
         if (mounted) {
-          _showChallengeCompletedOverlay(status, reason);
+          _showChallengeCompletedOverlay(status, reason, attemptCount);
         }
       };
     } else {
-      chatProvider.onChallengeCompletedEvent = null;
+      provider.onChallengeCompletedEvent = null;
     }
 
-    if (widget.challenge != null) {
+    if (_activeChallenge != null) {
       setState(() {
         _isSettingUpChallenge = true;
         _displayedStorylineText = "";
@@ -64,23 +109,25 @@ class _ChatScreenState extends State<ChatScreen> {
         _rawStoryline = "";
       });
       try {
-        await chatProvider.setupChallenge(
-          challengeId: widget.challenge!.id,
-          personaId: widget.persona.id,
+        print("Setup Challenge API Called");
+        await provider.setupChallenge(
+          challengeId: _activeChallenge!.id,
+          personaId: _activePersona.id,
           attemptSessionId: widget.attemptSessionId,
         );
         
         // Retrieve storyline and trigger narration animation
-        final intro = chatProvider.currentChallengeIntro;
+        final intro = provider.currentChallengeIntro;
         if (intro != null && intro['storyline'] != null) {
           _rawStoryline = intro['storyline'] as String;
           
-          // Check if conversation history is NOT empty (meaning challenge is resumed)
-          if (chatProvider.messages.isNotEmpty) {
+          // Check if conversation history is NOT empty (meaning challenge is resumed) or if it's a replay
+          if (provider.messages.isNotEmpty || _skipNarrationForReplay) {
             setState(() {
               _isNarrating = false;
               _displayedStorylineText = NarrationParser.getCleanText(_rawStoryline);
             });
+            _skipNarrationForReplay = false;
           } else {
             // Fresh challenge, progressive word-by-word animation with pauses
             _startNarrationAnimation(_rawStoryline);
@@ -100,8 +147,8 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
     } else {
-      chatProvider.clearChallengeSession();
-      await chatProvider.fetchMessages(widget.persona.id);
+      provider.clearChallengeSession();
+      await provider.fetchMessages(_activePersona.id);
     }
   }
 
@@ -254,36 +301,23 @@ class _ChatScreenState extends State<ChatScreen> {
 
     await chatProvider.completeChallenge(status, reason: reason);
     
+    int attemptCount = 1;
+    if (_activeChallenge != null) {
+      final attempts = await chatProvider.fetchChallengeAttempts(_activeChallenge!.id);
+      attemptCount = attempts.isNotEmpty ? attempts.length : 1;
+    }
+
     if (mounted) {
-      _showChallengeCompletedOverlay(status, reason);
+      _showChallengeCompletedOverlay(status, reason, attemptCount);
     }
   }
 
-  void _showChallengeCompletedOverlay(String status, String reason) {
-    final isWin = status.startsWith('won');
-    final isAbandon = status == 'abandoned';
+  void _showChallengeCompletedOverlay(String status, String reason, int attemptCount) {
+    final isWin = status.startsWith('won') || status == 'won_objective_completed';
     
-    IconData statusIcon = Icons.emoji_events;
-    Color iconColor = const Color(0xFFE6F58A); // Lime accent
-    String title = 'CHALLENGE COMPLETED';
-
-    if (isWin) {
-      statusIcon = status == 'won_objective_completed' ? Icons.check_circle : Icons.emoji_events;
-      iconColor = const Color(0xFFE6F58A);
-      title = status == 'won_objective_completed' ? '🎉 Challenge Completed' : '🎉 Challenge Won';
-    } else if (isAbandon) {
-      statusIcon = Icons.flag;
-      iconColor = Colors.white54;
-      title = 'CHALLENGE ABANDONED';
-    } else {
-      statusIcon = status == 'lost_timeout' ? Icons.timer_outlined : Icons.cancel;
-      iconColor = const Color(0xFFFF6B6B);
-      
-      if (status == 'lost_timeout') title = '❌ Challenge Failed (Timeout)';
-      if (status == 'lost_rejected') title = '❌ Challenge Failed (Rejected)';
-      if (status == 'lost_blocked') title = '❌ Challenge Failed (Blocked)';
-      if (status == 'lost_rule_violation') title = '❌ Challenge Failed (Violation)';
-    }
+    final title = isWin ? '🏆 Challenge Completed' : '❌ Challenge Failed';
+    final titleColor = isWin ? const Color(0xFFE6F58A) : const Color(0xFFFF6B6B);
+    final icon = isWin ? Icons.emoji_events : Icons.cancel;
 
     showGeneralDialog(
       context: context,
@@ -302,10 +336,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF141414),
                   borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: iconColor.withOpacity(0.3), width: 1.5),
+                  border: Border.all(color: titleColor.withOpacity(0.3), width: 1.5),
                   boxShadow: [
                     BoxShadow(
-                      color: iconColor.withOpacity(0.08),
+                      color: titleColor.withOpacity(0.08),
                       blurRadius: 24,
                       spreadRadius: 4,
                     )
@@ -314,15 +348,15 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Large Premium Icon
+                    // Icon
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: iconColor.withOpacity(0.05),
+                        color: titleColor.withOpacity(0.05),
                         shape: BoxShape.circle,
-                        border: Border.all(color: iconColor.withOpacity(0.2), width: 1),
+                        border: Border.all(color: titleColor.withOpacity(0.2), width: 1),
                       ),
-                      child: Icon(statusIcon, size: 54, color: iconColor),
+                      child: Icon(icon, size: 54, color: titleColor),
                     ),
                     const SizedBox(height: 24),
                     Text(
@@ -335,28 +369,108 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     Text(
                       reason,
                       style: const TextStyle(fontSize: 14, color: Colors.white70, height: 1.5),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 32),
-                    // OK Button (pops dialog + pops chat screen)
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(dialogContext); // Close dialog
-                        Navigator.pop(context); // Pop chat screen
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: iconColor,
-                        foregroundColor: Colors.black,
-                        minimumSize: const Size(double.infinity, 50),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        elevation: 0,
+                    const SizedBox(height: 20),
+                    Text(
+                      "Attempts: $attemptCount",
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.white54,
+                        fontWeight: FontWeight.w500,
                       ),
-                      child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     ),
+                    const SizedBox(height: 32),
+                    
+                    if (isWin) ...[
+                      // Play Again Button
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(dialogContext); // Close dialog
+                          setState(() {
+                            _skipNarrationForReplay = true;
+                          });
+                          _initializeChat();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: titleColor,
+                          foregroundColor: Colors.black,
+                          minimumSize: const Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          elevation: 0,
+                        ),
+                        child: const Text('Play Again', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      ),
+                      const SizedBox(height: 12),
+                      // Next Challenge Button
+                      OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(dialogContext); // Close dialog
+                          
+                          // Load challenges and personas
+                          setState(() {
+                            _isLoadingNextChallenges = true;
+                          });
+                          final chatProvider = context.read<ChatProvider>();
+                          Future.wait([
+                            chatProvider.fetchChallenges(),
+                            chatProvider.fetchAllPersonas(),
+                          ]).then((_) {
+                            if (mounted) {
+                              setState(() {
+                                _isLoadingNextChallenges = false;
+                                _showChallengeSelectionOverlay = true;
+                              });
+                            }
+                          });
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white30, width: 1.5),
+                          minimumSize: const Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        child: const Text('Next Challenge', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      ),
+                    ] else ...[
+                      // Try Again Button
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(dialogContext); // Close dialog
+                          setState(() {
+                            _skipNarrationForReplay = true;
+                          });
+                          _initializeChat();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: titleColor,
+                          foregroundColor: Colors.black,
+                          minimumSize: const Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          elevation: 0,
+                        ),
+                        child: const Text('Try Again', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      ),
+                      const SizedBox(height: 12),
+                      // Exit Challenge Button
+                      OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(dialogContext); // Close dialog
+                          Navigator.pop(context); // Pop chat screen
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white30, width: 1.5),
+                          minimumSize: const Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        child: const Text('Exit Challenge', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -470,7 +584,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final theme = Theme.of(context);
     final accentColor = theme.colorScheme.primary;
 
-    final isChallengeMode = widget.challenge != null;
+    final isChallengeMode = _activeChallenge != null;
+    final provider = context.watch<ChatProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -479,16 +594,16 @@ class _ChatScreenState extends State<ChatScreen> {
             CircleAvatar(
               radius: 18,
               backgroundColor: const Color(0xFF2A2A2A),
-              backgroundImage: widget.persona.imageUrl != null && widget.persona.imageUrl!.isNotEmpty
-                  ? CachedNetworkImageProvider(widget.persona.imageUrl!)
+              backgroundImage: _activePersona.imageUrl != null && _activePersona.imageUrl!.isNotEmpty
+                  ? CachedNetworkImageProvider(_activePersona.imageUrl!)
                   : null,
-              onBackgroundImageError: widget.persona.imageUrl != null && widget.persona.imageUrl!.isNotEmpty
+              onBackgroundImageError: _activePersona.imageUrl != null && _activePersona.imageUrl!.isNotEmpty
                   ? (exception, stackTrace) {
-                      print("Exception caught while fetching image for ${widget.persona.name}: $exception");
+                      print("Exception caught while fetching image for ${_activePersona.name}: $exception");
                     }
                   : null,
-              child: widget.persona.imageUrl == null || widget.persona.imageUrl!.isEmpty
-                  ? Text(widget.persona.name[0], style: const TextStyle(fontSize: 14))
+              child: _activePersona.imageUrl == null || _activePersona.imageUrl!.isEmpty
+                  ? Text(_activePersona.name[0], style: const TextStyle(fontSize: 14))
                   : null,
             ),
             const SizedBox(width: 12),
@@ -498,7 +613,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    widget.persona.name,
+                    _activePersona.name,
                     style: theme.appBarTheme.titleTextStyle?.copyWith(fontSize: 16),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -528,132 +643,164 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
         ],
       ),
-      body: _isSettingUpChallenge
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: accentColor),
-                  const SizedBox(height: 16),
-                  const Text('Setting up diplomatic challenge...', style: TextStyle(color: Colors.white70, fontSize: 14)),
-                ],
-              ),
-            )
-          : Column(
-              children: [
-                Expanded(
-                  child: Consumer<ChatProvider>(
-                    builder: (context, provider, child) {
-                      if (provider.isMessagesLoading && provider.messages.isEmpty) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-
-                      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
-
-                      final hasIntro = provider.currentChallengeIntro != null;
-                      final itemCount = provider.messages.length + (hasIntro ? 1 : 0);
-
-                      return ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: itemCount,
-                        itemBuilder: (context, index) {
-                          if (hasIntro && index == 0) {
-                            return _buildStorylineCard(theme, provider.currentChallengeIntro!);
+      body: Stack(
+        children: [
+          // Main Chat view
+          _isSettingUpChallenge
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(color: accentColor),
+                      const SizedBox(height: 16),
+                      const Text('Setting up diplomatic challenge...', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    ],
+                  ),
+                )
+              : Column(
+                  children: [
+                    Expanded(
+                      child: Consumer<ChatProvider>(
+                        builder: (context, provider, child) {
+                          if (provider.isMessagesLoading && provider.messages.isEmpty) {
+                            return const Center(child: CircularProgressIndicator());
                           }
 
-                          final messageIndex = hasIntro ? index - 1 : index;
-                          final message = provider.messages[messageIndex];
-                          final isMe = message.isUser;
+                          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
-                          return Align(
-                            alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: isMe ? accentColor : const Color(0xFF1A1A1A),
-                                borderRadius: BorderRadius.only(
-                                  topLeft: const Radius.circular(16),
-                                  topRight: const Radius.circular(16),
-                                  bottomLeft: Radius.circular(isMe ? 16 : 0),
-                                  bottomRight: Radius.circular(isMe ? 0 : 16),
+                          final hasIntro = provider.currentChallengeIntro != null;
+                          final itemCount = provider.messages.length + (hasIntro ? 1 : 0);
+
+                          return ListView.builder(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.all(16),
+                            itemCount: itemCount,
+                            itemBuilder: (context, index) {
+                              if (hasIntro && index == 0) {
+                                return _buildStorylineCard(theme, provider.currentChallengeIntro!);
+                              }
+
+                              final messageIndex = hasIntro ? index - 1 : index;
+                              final message = provider.messages[messageIndex];
+                              final isMe = message.isUser;
+
+                              return Align(
+                                alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: isMe ? accentColor : const Color(0xFF1A1A1A),
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: const Radius.circular(16),
+                                      topRight: const Radius.circular(16),
+                                      bottomLeft: Radius.circular(isMe ? 16 : 0),
+                                      bottomRight: Radius.circular(isMe ? 0 : 16),
+                                    ),
+                                  ),
+                                  constraints: BoxConstraints(
+                                    maxWidth: MediaQuery.of(context).size.width * 0.75,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        message.text,
+                                        style: TextStyle(
+                                          color: isMe ? Colors.black : Colors.white,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        message.timeStampString,
+                                        style: TextStyle(
+                                          color: isMe ? Colors.black54 : Colors.white54,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              constraints: BoxConstraints(
-                                maxWidth: MediaQuery.of(context).size.width * 0.75,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    message.text,
-                                    style: TextStyle(
-                                      color: isMe ? Colors.black : Colors.white,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    message.timeStampString,
-                                    style: TextStyle(
-                                      color: isMe ? Colors.black54 : Colors.white54,
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                              );
+                            },
                           );
                         },
-                      );
-                    },
-                  ),
-                ),
-                if (widget.attemptSessionId != null)
-                  _buildReadOnlyResultBanner(theme, context.watch<ChatProvider>().currentChallengeStatus)
-                else
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    color: Colors.black,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1A1A1A),
-                              borderRadius: BorderRadius.circular(24),
-                            ),
-                            child: TextField(
-                              controller: _messageController,
-                              style: const TextStyle(color: Colors.white),
-                              decoration: const InputDecoration(
-                                hintText: 'Type a message...',
-                                hintStyle: TextStyle(color: Colors.white54),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                    ),
+                    if (widget.attemptSessionId != null)
+                      _buildReadOnlyResultBanner(theme, context.watch<ChatProvider>().currentChallengeStatus)
+                    else
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        color: Colors.black,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1A1A1A),
+                                  borderRadius: BorderRadius.circular(24),
+                                ),
+                                child: TextField(
+                                  controller: _messageController,
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Type a message...',
+                                    hintStyle: TextStyle(color: Colors.white54),
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              onPressed: () {
+                                if (_messageController.text.isNotEmpty) {
+                                  context.read<ChatProvider>().sendMessage(
+                                        _activePersona.id,
+                                        _messageController.text,
+                                      );
+                                  _messageController.clear();
+                                }
+                              },
+                              icon: Icon(Icons.send, color: accentColor),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: () {
-                            if (_messageController.text.isNotEmpty) {
-                              context.read<ChatProvider>().sendMessage(
-                                    widget.persona.id,
-                                    _messageController.text,
-                                  );
-                              _messageController.clear();
-                            }
-                          },
-                          icon: Icon(Icons.send, color: accentColor),
-                        ),
-                      ],
+                      ),
+                  ],
+                ),
+
+          // Next Challenge Overlay
+          if (_showChallengeSelectionOverlay)
+            _buildChallengeSelectionOverlay(context, provider),
+
+          // Persona Selection Overlay
+          if (_showPersonaSelectionOverlay)
+            _buildPersonaSelectionOverlay(context, provider),
+
+          // Loading next challenges spinner
+          if (_isLoadingNextChallenges)
+            Container(
+              color: Colors.black87,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: accentColor),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Loading next challenges...',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                     ),
-                  ),
-              ],
+                  ],
+                ),
+              ),
             ),
+        ],
+      ),
     );
   }
 
@@ -759,5 +906,430 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
     );
+  }
+
+  Color _getDifficultyColor(String? difficulty) {
+    switch (difficulty?.toLowerCase()) {
+      case 'easy':
+        return const Color(0xFF8CE99A); // Soft green
+      case 'medium':
+        return const Color(0xFFFFD43B); // Soft yellow
+      case 'hard':
+        return const Color(0xFFFF8787); // Soft red
+      default:
+        return Colors.white54;
+    }
+  }
+
+  Widget _buildChallengeSelectionOverlay(BuildContext context, ChatProvider provider) {
+    final theme = Theme.of(context);
+    final accentColor = theme.colorScheme.primary;
+    
+    // Filter out the current active challenge
+    final nextChallenges = provider.challenges
+        .where((c) => c.id != _activeChallenge?.id)
+        .toList();
+
+    return Container(
+      color: const Color(0xFA0F0F0F), // Sleek, premium dark color with 98% opacity
+      child: SafeArea(
+        child: Column(
+          children: [
+            // AppBar replacement
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Select Next Challenge',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white70),
+                    onPressed: () {
+                      setState(() {
+                        _showChallengeSelectionOverlay = false;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white10),
+            
+            // List of challenges
+            Expanded(
+              child: nextChallenges.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No other challenges available.',
+                        style: TextStyle(color: Colors.white54, fontSize: 16),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: nextChallenges.length,
+                      itemBuilder: (context, index) {
+                        final challenge = nextChallenges[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: InkWell(
+                            onTap: () => _handleNextChallengeSelected(challenge),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF161616),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.white10),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: accentColor.withOpacity(0.08),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: accentColor.withOpacity(0.2)),
+                                        ),
+                                        child: Icon(Icons.emoji_events_outlined, color: accentColor, size: 24),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              challenge.title,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            if (challenge.difficulty != null) ...[
+                                              const SizedBox(height: 6),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: _getDifficultyColor(challenge.difficulty).withOpacity(0.12),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(color: _getDifficultyColor(challenge.difficulty).withOpacity(0.3)),
+                                                ),
+                                                child: Text(
+                                                  challenge.difficulty!.toUpperCase(),
+                                                  style: TextStyle(
+                                                    color: _getDifficultyColor(challenge.difficulty),
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                      const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 16),
+                                    ],
+                                  ),
+                                  if (challenge.shortDescription != null && challenge.shortDescription!.isNotEmpty) ...[
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      challenge.shortDescription!,
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 13,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _handleNextChallengeSelected(Challenge challenge) {
+    if (challenge.selectedPersonaId != null) {
+      final targetPersona = _chatProvider?.getPersonaById(challenge.selectedPersonaId!);
+      if (targetPersona != null) {
+        setState(() {
+          _activeChallenge = challenge;
+          _activePersona = targetPersona;
+          _showChallengeSelectionOverlay = false;
+          _showPersonaSelectionOverlay = false;
+          _skipNarrationForReplay = false;
+        });
+        _initializeChat();
+        return;
+      }
+    }
+
+    setState(() {
+      _selectedNextChallenge = challenge;
+      _showChallengeSelectionOverlay = false;
+      _showPersonaSelectionOverlay = true;
+    });
+  }
+
+  Widget _buildPersonaSelectionOverlay(BuildContext context, ChatProvider provider) {
+    final theme = Theme.of(context);
+    final cardColor = const Color(0xFF161616);
+    final accentColor = theme.colorScheme.primary;
+    final challenge = _selectedNextChallenge;
+
+    if (challenge == null) return const SizedBox.shrink();
+
+    final suggestedIds = challenge.suggestedPersonas ?? [];
+    
+    final sortedPersonas = List<Persona>.from(provider.allPersonas);
+    sortedPersonas.sort((a, b) {
+      final aSuggested = suggestedIds.contains(a.id);
+      final bSuggested = suggestedIds.contains(b.id);
+      if (aSuggested && !bSuggested) return -1;
+      if (!aSuggested && bSuggested) return 1;
+      return 0;
+    });
+
+    return Container(
+      color: const Color(0xFA0F0F0F),
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                    onPressed: () {
+                      setState(() {
+                        _showPersonaSelectionOverlay = false;
+                        _showChallengeSelectionOverlay = true;
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Select a Persona',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white70),
+                    onPressed: () {
+                      setState(() {
+                        _showPersonaSelectionOverlay = false;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white10),
+
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      challenge.title,
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    if (challenge.context?.goal != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        challenge.context!.goal,
+                        style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Text(
+                'AVAILABLE CANDIDATES',
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 0.8,
+                ),
+                itemCount: sortedPersonas.length,
+                itemBuilder: (context, index) {
+                  final persona = sortedPersonas[index];
+                  final isSuggested = suggestedIds.contains(persona.id);
+                  return _buildPersonaCardItem(persona, cardColor, accentColor, isSuggested);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPersonaCardItem(Persona persona, Color cardColor, Color accentColor, bool isRecommended) {
+    final recommendedBadgeColor = const Color(0xFFE6F58A);
+    return InkWell(
+      onTap: () => _handlePersonaSelectedForNextChallenge(persona),
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: isRecommended ? recommendedBadgeColor : Colors.white10,
+            width: isRecommended ? 2.0 : 1,
+          ),
+          boxShadow: [
+            if (isRecommended)
+              BoxShadow(
+                color: recommendedBadgeColor.withOpacity(0.08),
+                blurRadius: 12,
+                spreadRadius: 2,
+              ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      color: const Color(0xFF2A2A2A),
+                      child: persona.imageUrl != null && persona.imageUrl!.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: persona.imageUrl!,
+                              fit: BoxFit.cover,
+                              errorWidget: (context, url, error) => _buildPlaceholderItem(persona.name[0]),
+                            )
+                          : _buildPlaceholderItem(persona.name[0]),
+                    ),
+                    if (isRecommended)
+                      Positioned(
+                        top: 10,
+                        left: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: recommendedBadgeColor,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.3),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.star, size: 10, color: Colors.black),
+                              SizedBox(width: 4),
+                              Text(
+                                'SUGGESTED',
+                                style: TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      persona.name,
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      persona.desc,
+                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderItem(String char) {
+    return Center(child: Text(char, style: const TextStyle(fontSize: 32, color: Colors.white)));
+  }
+
+  void _handlePersonaSelectedForNextChallenge(Persona persona) {
+    setState(() {
+      _activeChallenge = _selectedNextChallenge;
+      _activePersona = persona;
+      _showChallengeSelectionOverlay = false;
+      _showPersonaSelectionOverlay = false;
+      _skipNarrationForReplay = false;
+    });
+    _initializeChat();
   }
 }
