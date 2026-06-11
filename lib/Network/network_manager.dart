@@ -57,9 +57,19 @@ class Network {
             type: APIExceptionType.ServerUnderMaintenance,
           );
         case DioExceptionType.badResponse:
+          final responseData = e.response?.data;
+          String errorMsg = "Bad Response";
+          if (responseData is Map && responseData.containsKey('detail')) {
+            errorMsg = responseData['detail'].toString();
+          } else if (responseData is Map && responseData.containsKey('message')) {
+            errorMsg = responseData['message'].toString();
+          } else if (e.response?.statusMessage != null) {
+            errorMsg = e.response!.statusMessage!;
+          }
           throw APIExceptions(
-            message: "Bad Response",
+            message: errorMsg,
             type: APIExceptionType.badResponse,
+            statusCode: e.response?.statusCode,
           );
         case DioExceptionType.connectionTimeout:
           throw Exception("Connection Timeout");
