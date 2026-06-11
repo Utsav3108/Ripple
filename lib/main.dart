@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'chat_list_screen.dart';
+import 'login_screen.dart';
 import 'Provider/chat_provider.dart';
 import 'Theme/app_theme.dart';
 
@@ -24,7 +25,13 @@ class MyApp extends StatelessWidget {
       title: 'Ripple',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const ChatListScreen(),
+      home: Consumer<ChatProvider>(
+        builder: (context, provider, child) {
+          return provider.isAuthenticated
+              ? const ChatListScreen()
+              : const LoginScreen();
+        },
+      ),
     );
   }
 }

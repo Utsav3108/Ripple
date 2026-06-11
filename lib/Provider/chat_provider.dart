@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../Network/network_manager.dart';
 import '../Network/socket_manager.dart';
 import '../Model/model.dart';
+import '../core/config/app_config.dart';
 
 class ChatProvider with ChangeNotifier {
   final Network _network = Network();
   final SocketManager _socketManager = SocketManager();
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   
   List<Persona> _chats = [];
   List<Message> _messages = [];
@@ -45,20 +48,32 @@ class ChatProvider with ChangeNotifier {
   int? _currentChallengeDuration;
   int? get currentChallengeDuration => _currentChallengeDuration;
 
-  // For demo purposes, we'll use a hardcoded user_id
-  final int currentUserId = 1;
+  int? _currentUserId;
+  int? get currentUserId => _currentUserId;
+  bool get isAuthenticated => _currentUserId != null;
+  String _userName = 'Utsav';
+  String get userName => _userName;
 
   // Callback to propagate challenge_completed event to screen listener
   Function(Map<String, dynamic>)? onChallengeCompletedEvent;
 
   ChatProvider() {
     _initSocket();
+    _initGoogleSignIn();
+  }
+
+  void _initGoogleSignIn() {
+    _googleSignIn.initialize(serverClientId: AppConfig.serverClientId).then((_) {
+      print("Google Sign In initialized successfully");
+    }).catchError((error) {
+      print("Failed to initialize Google Sign In: $error");
+    });
   }
 
   void _initSocket() {
-    _socketManager.connect(currentUserId);
     _socketManager.onMessageReceived = (data) {
-      final newMessage = Message.fromJson(data, currentUserId);
+      if (_currentUserId == null) return;
+      final newMessage = Message.fromJson(data, _currentUserId!);
       
       bool isRelevant = false;
       if (_currentChallengeSessionId != null) {
@@ -68,10 +83,10 @@ class ChatProvider with ChangeNotifier {
           isRelevant = true;
         }
       } else {
-        // In normal mode, check if the message is between currentUserId and _activePersonaId
+        // In normal mode, check if the message is between _currentUserId and _activePersonaId
         if (_activePersonaId != null && 
-            ((newMessage.senderId == currentUserId && newMessage.receiverId == _activePersonaId) ||
-             (newMessage.senderId == _activePersonaId && newMessage.receiverId == currentUserId))) {
+            ((newMessage.senderId == _currentUserId! && newMessage.receiverId == _activePersonaId) ||
+             (newMessage.senderId == _activePersonaId && newMessage.receiverId == _currentUserId!))) {
           isRelevant = true;
         }
       }
@@ -98,7 +113,7 @@ class ChatProvider with ChangeNotifier {
 
     try {
       final request = Request(
-        url: '/personas/$currentUserId',
+        url: '/personas/${_currentUserId!}',
         method: HTTPMethod.GET,
       );
 
@@ -188,7 +203,7 @@ class ChatProvider with ChangeNotifier {
         url: '/messages',
         method: HTTPMethod.GET,
         body: {
-          'sender_id': currentUserId,
+          'sender_id': _currentUserId!,
           'receiver_id': receiverId,
         },
       );
@@ -197,7 +212,7 @@ class ChatProvider with ChangeNotifier {
 
       if (response.data is List) {
         _messages = (response.data as List)
-            .map((json) => Message.fromJson(json, currentUserId))
+            .map((json) => Message.fromJson(json, _currentUserId!))
             .toList();
       }
     } catch (e) {
@@ -235,6 +250,124 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
+  Future<void> createPersona({
+    required String name,
+    required String desc,
+    required String traits,
+    required String imageUrl,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final request = Request(
+        url: '/personas',
+        method: HTTPMethod.POST,
+        body: {
+          'name': name,
+          'desc': desc,
+          'traits': traits,
+          'image_url': imageUrl,
+        },
+      );
+      await _network.performRequest(request);
+      await fetchAllPersonas();
+      await fetchChattedPersonas();
+    } catch (e) {
+      print("Error creating persona: $e");
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> createChallenge(Map<String, dynamic> challengeData) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final request = Request(
+        url: '/challenges',
+        method: HTTPMethod.POST,
+        body: challengeData,
+      );
+      await _network.performRequest(request);
+      await fetchChallenges();
+    } catch (e) {
+      print("Error creating challenge: $e");
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loginWithGoogle() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _googleSignIn.initialize(serverClientId: AppConfig.serverClientId);
+      final GoogleSignInAccount? googleUser = await _googleSignIn.authenticate();
+      if (googleUser == null) {
+        throw Exception("Google Sign-In was cancelled by user.");
+      }
+      
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final String? idToken = googleAuth.idToken;
+      
+      if (idToken == null) {
+        throw Exception("Failed to retrieve Google ID Token.");
+      }
+
+      _network.setToken(idToken);
+
+      final request = Request(
+        url: '/auth/google',
+        method: HTTPMethod.POST,
+        body: {
+          'id_token': idToken,
+        },
+      );
+      final response = await _network.performRequest(request);
+      if (response.data is Map) {
+        final data = Map<String, dynamic>.from(response.data as Map);
+        _currentUserId = data['id'] is int ? data['id'] as int : int.parse(data['id'].toString());
+        _userName = data['name']?.toString() ?? googleUser.displayName ?? 'User';
+        
+        // Connect Socket
+        _socketManager.connect(_currentUserId!);
+        
+        // Fetch data
+        await fetchChattedPersonas();
+        await fetchChallenges();
+        await fetchAllPersonas();
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      print("Error logging in: $e");
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+
+
+  void logout() {
+    _currentUserId = null;
+    _socketManager.disconnect();
+    _chats = [];
+    _challenges = [];
+    _messages = [];
+    _network.clearToken();
+    _googleSignIn.disconnect().catchError((error) {
+      print("Error disconnecting Google Sign In: $error");
+    });
+    notifyListeners();
+  }
+
+
   Persona? getPersonaById(int id) {
     try {
       return _allPersonas.firstWhere((p) => p.id == id);
@@ -271,7 +404,7 @@ class ChatProvider with ChangeNotifier {
         body: {
           'challenge_id': challengeId,
           'persona_id': personaId,
-          'user_id': currentUserId,
+          'user_id': _currentUserId!,
           if (attemptSessionId != null) 'attempt_session_id': attemptSessionId,
         },
       );
@@ -297,7 +430,7 @@ class ChatProvider with ChangeNotifier {
         // Parse conversation history from setup challenge directly
         if (data['conversation_history'] is List) {
           _messages = (data['conversation_history'] as List)
-              .map((json) => Message.fromJson(Map<String, dynamic>.from(json as Map), currentUserId))
+              .map((json) => Message.fromJson(Map<String, dynamic>.from(json as Map), _currentUserId!))
               .toList();
         } else {
           _messages = [];
@@ -306,7 +439,7 @@ class ChatProvider with ChangeNotifier {
         // Bypassing socket connections for read-only historical attempt viewers
         if (_currentChallengeSessionId != null && attemptSessionId == null) {
           // Socket order: Setup API, Emit Join, Emit Join Challenge
-          _socketManager.emitJoin(currentUserId);
+          _socketManager.emitJoin(_currentUserId!);
           _socketManager.emitJoinChallenge(_currentChallengeSessionId!);
         }
       }
@@ -371,7 +504,7 @@ class ChatProvider with ChangeNotifier {
     // Optimistically add to list
     final tempMessage = Message(
       id: 0, // Temporary ID
-      senderId: currentUserId,
+      senderId: _currentUserId!,
       receiverId: receiverId,
       text: text,
       timestamp: DateTime.now(),
@@ -383,7 +516,7 @@ class ChatProvider with ChangeNotifier {
 
     // Send via socket
     _socketManager.sendMessage(
-      currentUserId,
+      _currentUserId!,
       receiverId,
       text,
       challengeSessionId: _currentChallengeSessionId,

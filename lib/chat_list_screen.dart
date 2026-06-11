@@ -5,6 +5,8 @@ import 'chat_screen.dart';
 import 'persona_selection_screen.dart';
 import 'challenge_stats_screen.dart';
 import 'search_screen.dart';
+import 'create_persona_screen.dart';
+import 'create_challenge_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -14,8 +16,15 @@ class ChatListScreen extends StatefulWidget {
 }
 
 class _ChatListScreenState extends State<ChatListScreen> {
-  final String _firstName = 'Utsav';
   int _currentBottomNavIndex = 0;
+  String _selectedTrack = 'All';
+  String _searchQuery = '';
+  final Map<String, List<String>> _trackMapping = {
+    'Business & Career': ['Finance', 'Negotiation', 'Business Strategy', 'Entrepreneurship'],
+    'Social & Rapport': ['Dating', 'Social Skills', 'Confidence', 'Emotional Intelligence', 'Conflict Resolution', 'Empathy'],
+    'Persuasion & Rhetoric': ['Persuasion', 'Critical Thinking', 'Public Speaking', 'Courtroom Drama'],
+    'Leadership & Science': ['Leadership', 'Science', 'Politics'],
+  };
 
   @override
   void initState() {
@@ -50,6 +59,48 @@ class _ChatListScreenState extends State<ChatListScreen> {
       appBar: AppBar(
         title: const Text('Ripple'),
         actions: [
+          if (_currentBottomNavIndex == 0 || _currentBottomNavIndex == 1)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: Center(
+                child: InkWell(
+                  onTap: () {
+                    if (_currentBottomNavIndex == 0) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CreatePersonaScreen(),
+                        ),
+                      );
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CreateChallengeScreen(),
+                        ),
+                      );
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: accentColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: accentColor.withOpacity(0.3), width: 1),
+                    ),
+                    child: Text(
+                      "+ Create",
+                      style: TextStyle(
+                        color: accentColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           IconButton(
             onPressed: () {},
             icon: const Icon(Icons.notifications_none),
@@ -76,7 +127,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         children: [
                           const TextSpan(text: 'Hello, '),
                           TextSpan(
-                            text: '$_firstName!',
+                            text: '${provider.userName}!',
                             style: TextStyle(
                               color: accentColor,
                               fontWeight: FontWeight.bold,
@@ -106,13 +157,42 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                     ),
                   ),
+                  // Search Bar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: cardColor,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: TextField(
+                        onChanged: (val) {
+                          setState(() {
+                            _searchQuery = val;
+                          });
+                        },
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Search challenges...',
+                          hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
+                          prefixIcon: Icon(Icons.search, color: accentColor, size: 20),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Curriculum Track Filters
+                  _buildTrackFilterRow(provider, accentColor, cardColor),
+                  const SizedBox(height: 8),
                   Expanded(
                     child: _buildChallengesList(provider, accentColor, cardColor),
                   ),
                 ],
               ),
               // Tab 2: Profile Tab
-              _buildProfileView(accentColor, cardColor),
+              _buildProfileView(provider, accentColor, cardColor),
             ],
           );
         },
@@ -239,15 +319,51 @@ class _ChatListScreenState extends State<ChatListScreen> {
     if (provider.isChallengesLoading && provider.challenges.isEmpty) {
       return Center(child: CircularProgressIndicator(color: accentColor));
     }
+
+    final filteredChallenges = provider.challenges.where((challenge) {
+      // 1. Domain Track Filter
+      bool matchesTrack = false;
+      if (_selectedTrack == 'All') {
+        matchesTrack = true;
+      } else {
+        final allowedSubCategories = _trackMapping[_selectedTrack] ?? [];
+        if (challenge.categories != null) {
+          matchesTrack = challenge.categories!.any((cat) => allowedSubCategories.contains(cat));
+        }
+      }
+
+      // 2. Search Query Filter
+      final matchesSearch = _searchQuery.isEmpty ||
+          challenge.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (challenge.context?.goal != null &&
+              challenge.context!.goal.toLowerCase().contains(_searchQuery.toLowerCase())) ||
+          (challenge.categories != null &&
+              challenge.categories!.any((cat) => cat.toLowerCase().contains(_searchQuery.toLowerCase())));
+
+      return matchesTrack && matchesSearch;
+    }).toList();
+
+    if (filteredChallenges.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 40.0),
+          child: Text(
+            'No challenges found matching selection.',
+            style: TextStyle(color: Colors.white54, fontSize: 14),
+          ),
+        ),
+      );
+    }
+
     return RefreshIndicator(
       onRefresh: () => provider.fetchChallenges(),
       color: accentColor,
       backgroundColor: cardColor,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: provider.challenges.length,
+        itemCount: filteredChallenges.length,
         itemBuilder: (context, index) {
-          final challenge = provider.challenges[index];
+          final challenge = filteredChallenges[index];
           return Padding(
             padding: const EdgeInsets.only(bottom: 16.0),
             child: InkWell(
@@ -313,6 +429,31 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 12),
+                    if (challenge.categories != null && challenge.categories!.isNotEmpty) ...[
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: challenge.categories!.map((cat) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.04),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.white10, width: 0.8),
+                            ),
+                            child: Text(
+                              cat,
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -361,7 +502,57 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
-  Widget _buildProfileView(Color accentColor, Color cardColor) {
+  Widget _buildTrackFilterRow(ChatProvider provider, Color accentColor, Color cardColor) {
+    final tracks = ['All', ..._trackMapping.keys];
+
+    return SizedBox(
+      height: 44,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+        itemCount: tracks.length,
+        itemBuilder: (context, index) {
+          final track = tracks[index];
+          final isSelected = track == _selectedTrack;
+          
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  _selectedTrack = track;
+                });
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isSelected ? accentColor : cardColor,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSelected ? accentColor : Colors.white10,
+                    width: 1,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  track,
+                  style: TextStyle(
+                    color: isSelected ? Colors.black : Colors.white70,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildProfileView(ChatProvider provider, Color accentColor, Color cardColor) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
@@ -375,18 +566,18 @@ class _ChatListScreenState extends State<ChatListScreen> {
               shape: BoxShape.circle,
               border: Border.all(color: accentColor, width: 2),
             ),
-            child: const CircleAvatar(
+            child: CircleAvatar(
               radius: 60,
-              backgroundColor: Color(0xFF2A2A2A),
+              backgroundColor: const Color(0xFF2A2A2A),
               child: Text(
-                'U',
-                style: TextStyle(fontSize: 48, color: Colors.white, fontWeight: FontWeight.bold),
+                provider.userName.isNotEmpty ? provider.userName[0].toUpperCase() : 'U',
+                style: const TextStyle(fontSize: 48, color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ),
           ),
           const SizedBox(height: 16),
           Text(
-            _firstName,
+            provider.userName,
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           const Text(
@@ -430,6 +621,27 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   style: TextStyle(fontSize: 13, color: Colors.white70, height: 1.4),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 32),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                context.read<ChatProvider>().logout();
+              },
+              icon: const Icon(Icons.logout, color: Colors.redAccent, size: 18),
+              label: const Text(
+                'Logout',
+                style: TextStyle(color: Colors.redAccent, fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.redAccent, width: 1),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
             ),
           ),
         ],

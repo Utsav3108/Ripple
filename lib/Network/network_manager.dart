@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import '../core/config/app_config.dart';
 
 enum HTTPMethod { GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS }
 
@@ -14,20 +15,29 @@ class Request {
 }
 
 class Network {
-  static String getBaseURL() {
-
-    final baseUrl = Platform.isAndroid
-        ? 'http://10.0.2.2:8000'
-        : 'http://localhost:8000';
-
-
-    //final baseUrl = 'https://nf0np0l7-8000.inc1.devtunnels.ms';
-    return baseUrl;
-  }
+  static final Network _instance = Network._internal();
+  factory Network() => _instance;
 
   final Dio dio = Dio();
+  String? _token;
 
-  Network();
+  Network._internal();
+
+  void setToken(String token) {
+    _token = token;
+    dio.options.headers['Authorization'] = 'Bearer $token';
+  }
+
+  void clearToken() {
+    _token = null;
+    dio.options.headers.remove('Authorization');
+  }
+
+  static String getBaseURL() {
+    return Platform.isAndroid
+        ? AppConfig.androidBaseUrl
+        : AppConfig.iosBaseUrl;
+  }
 
   Future<Response> performRequest(Request request) async {
     try {
