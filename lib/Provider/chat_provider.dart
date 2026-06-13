@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../Network/network_manager.dart';
 import '../Network/socket_manager.dart';
 import '../Model/model.dart';
@@ -16,6 +17,17 @@ class ChatProvider with ChangeNotifier {
   List<Challenge> _challenges = [];
   List<Persona> _allPersonas = [];
   
+  String _userEmail = '';
+  String _userRole = '';
+  String _userBio = '';
+  String _userImageUrl = '';
+  Map<String, dynamic>? _userSettings;
+  int _totalChallengesAttempted = 0;
+  double _successRatePercentage = 0.0;
+  int _totalPracticeSessions = 0;
+  List<ProfileAttemptLogItem> _profileAttemptsLog = [];
+  bool _isProfileLoading = false;
+  
   bool _isLoading = false;
   bool _isMessagesLoading = false;
   bool _isSearching = false;
@@ -28,6 +40,17 @@ class ChatProvider with ChangeNotifier {
   List<Persona> get searchResults => _searchResults;
   List<Challenge> get challenges => _challenges;
   List<Persona> get allPersonas => _allPersonas;
+  
+  String get userEmail => _userEmail;
+  String get userRole => _userRole;
+  String get userBio => _userBio;
+  String get userImageUrl => _userImageUrl;
+  Map<String, dynamic>? get userSettings => _userSettings;
+  int get totalChallengesAttempted => _totalChallengesAttempted;
+  double get successRatePercentage => _successRatePercentage;
+  int get totalPracticeSessions => _totalPracticeSessions;
+  List<ProfileAttemptLogItem> get profileAttemptsLog => _profileAttemptsLog;
+  bool get isProfileLoading => _isProfileLoading;
   
   bool get isLoading => _isLoading;
   bool get isMessagesLoading => _isMessagesLoading;
@@ -60,6 +83,7 @@ class ChatProvider with ChangeNotifier {
   ChatProvider() {
     _initSocket();
     _initGoogleSignIn();
+    tryAutoLogin();
   }
 
   void _initGoogleSignIn() {
@@ -301,6 +325,109 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
+  Future<void> tryAutoLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? storedToken = prefs.getString('auth_token');
+    if (storedToken == null) return;
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      _network.setToken(storedToken);
+      
+      // Call profile endpoint to verify token validity
+      final request = Request(
+        url: '/profile',
+        method: HTTPMethod.GET,
+      );
+      final response = await _network.performRequest(request);
+      
+      if (response.data is Map) {
+        final data = Map<String, dynamic>.from(response.data as Map);
+        _currentUserId = data['id'] is int ? data['id'] as int : int.parse(data['id'].toString());
+        _userName = data['name']?.toString() ?? 'User';
+        _userEmail = data['email']?.toString() ?? '';
+        _userRole = data['role']?.toString() ?? '';
+        _userBio = data['bio']?.toString() ?? '';
+        _userImageUrl = data['image_url']?.toString() ?? '';
+        _userSettings = data['settings'] is Map ? Map<String, dynamic>.from(data['settings'] as Map) : null;
+        
+        final stats = data['stats'] is Map ? Map<String, dynamic>.from(data['stats'] as Map) : {};
+        _totalChallengesAttempted = stats['total_challenges_attempted'] is int ? stats['total_challenges_attempted'] as int : 0;
+        _successRatePercentage = stats['success_rate_percentage'] is num ? (stats['success_rate_percentage'] as num).toDouble() : 0.0;
+        _totalPracticeSessions = stats['total_practice_sessions'] is int ? stats['total_practice_sessions'] as int : 0;
+
+        if (data['attempts_log'] is List) {
+          _profileAttemptsLog = (data['attempts_log'] as List)
+              .map((json) => ProfileAttemptLogItem.fromJson(Map<String, dynamic>.from(json as Map)))
+              .take(5)
+              .toList();
+        } else {
+          _profileAttemptsLog = [];
+        }
+
+        // Connect Socket
+        _socketManager.connect(_currentUserId!);
+        
+        // Fetch data
+        await fetchChattedPersonas();
+        await fetchChallenges();
+        await fetchAllPersonas();
+      }
+    } catch (e) {
+      print("Stored token verification failed, trying Google silent sign-in: $e");
+      // If we failed due to 401/expired token, try Google Silent Sign-In
+      try {
+        final Future<GoogleSignInAccount?>? autoAuthFuture = _googleSignIn.attemptLightweightAuthentication();
+        if (autoAuthFuture != null) {
+          final GoogleSignInAccount? googleUser = await autoAuthFuture;
+          if (googleUser != null) {
+            final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+            final String? idToken = googleAuth.idToken;
+            if (idToken != null) {
+              _network.setToken(idToken);
+              await prefs.setString('auth_token', idToken);
+              
+              // Login with fresh token
+              final loginRequest = Request(
+                url: '/auth/google',
+                method: HTTPMethod.POST,
+                body: {
+                  'id_token': idToken,
+                },
+              );
+              final response = await _network.performRequest(loginRequest);
+              if (response.data is Map) {
+                final data = Map<String, dynamic>.from(response.data as Map);
+                _currentUserId = data['id'] is int ? data['id'] as int : int.parse(data['id'].toString());
+                _userName = data['name']?.toString() ?? googleUser.displayName ?? 'User';
+                _userImageUrl = data['image_url']?.toString() ?? googleUser.photoUrl ?? '';
+                
+                _socketManager.connect(_currentUserId!);
+                await fetchChattedPersonas();
+                await fetchChallenges();
+                await fetchAllPersonas();
+                await fetchUserProfile();
+              }
+              return;
+            }
+          }
+        }
+      } catch (silentError) {
+        print("Google silent sign-in failed: $silentError");
+      }
+      
+      // If silent sign in also fails, clean up
+      _network.clearToken();
+      await prefs.remove('auth_token');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> loginWithGoogle() async {
     _isLoading = true;
     _errorMessage = null;
@@ -320,6 +447,10 @@ class ChatProvider with ChangeNotifier {
       }
 
       _network.setToken(idToken);
+      
+      // Store token in SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('auth_token', idToken);
 
       final request = Request(
         url: '/auth/google',
@@ -333,6 +464,7 @@ class ChatProvider with ChangeNotifier {
         final data = Map<String, dynamic>.from(response.data as Map);
         _currentUserId = data['id'] is int ? data['id'] as int : int.parse(data['id'].toString());
         _userName = data['name']?.toString() ?? googleUser.displayName ?? 'User';
+        _userImageUrl = data['image_url']?.toString() ?? googleUser.photoUrl ?? '';
         
         // Connect Socket
         _socketManager.connect(_currentUserId!);
@@ -341,6 +473,7 @@ class ChatProvider with ChangeNotifier {
         await fetchChattedPersonas();
         await fetchChallenges();
         await fetchAllPersonas();
+        await fetchUserProfile();
       }
     } catch (e) {
       _errorMessage = e.toString();
@@ -352,15 +485,18 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
-
-
-  void logout() {
+  Future<void> logout() async {
     _currentUserId = null;
     _socketManager.disconnect();
     _chats = [];
     _challenges = [];
     _messages = [];
     _network.clearToken();
+    
+    // Clear token from SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('auth_token');
+    
     _googleSignIn.disconnect().catchError((error) {
       print("Error disconnecting Google Sign In: $error");
     });
@@ -526,6 +662,88 @@ class ChatProvider with ChangeNotifier {
   void clearSearchResults() {
     _searchResults = [];
     notifyListeners();
+  }
+
+  Future<void> fetchUserProfile() async {
+    _isProfileLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final request = Request(
+        url: '/profile',
+        method: HTTPMethod.GET,
+      );
+
+      final response = await _network.performRequest(request);
+
+      if (response.data is Map) {
+        final data = Map<String, dynamic>.from(response.data as Map);
+        _userEmail = data['email']?.toString() ?? '';
+        _userRole = data['role']?.toString() ?? '';
+        _userBio = data['bio']?.toString() ?? '';
+        _userImageUrl = data['image_url']?.toString() ?? '';
+        _userSettings = data['settings'] is Map ? Map<String, dynamic>.from(data['settings'] as Map) : null;
+        
+        final stats = data['stats'] is Map ? Map<String, dynamic>.from(data['stats'] as Map) : {};
+        _totalChallengesAttempted = stats['total_challenges_attempted'] is int ? stats['total_challenges_attempted'] as int : 0;
+        _successRatePercentage = stats['success_rate_percentage'] is num ? (stats['success_rate_percentage'] as num).toDouble() : 0.0;
+        _totalPracticeSessions = stats['total_practice_sessions'] is int ? stats['total_practice_sessions'] as int : 0;
+
+        if (data['attempts_log'] is List) {
+          _profileAttemptsLog = (data['attempts_log'] as List)
+              .map((json) => ProfileAttemptLogItem.fromJson(Map<String, dynamic>.from(json as Map)))
+              .take(5)
+              .toList();
+        } else {
+          _profileAttemptsLog = [];
+        }
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      print("Error fetching user profile: $e");
+    } finally {
+      _isProfileLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateUserProfile({
+    required String role,
+    required String bio,
+    Map<String, dynamic>? settings,
+  }) async {
+    _isProfileLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final request = Request(
+        url: '/profile',
+        method: HTTPMethod.PUT,
+        body: {
+          'role': role,
+          'bio': bio,
+          if (settings != null) 'settings': settings,
+        },
+      );
+
+      await _network.performRequest(request);
+      
+      // Update local state
+      _userRole = role;
+      _userBio = bio;
+      if (settings != null) {
+        _userSettings = settings;
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      print("Error updating user profile: $e");
+      rethrow;
+    } finally {
+      _isProfileLoading = false;
+      notifyListeners();
+    }
   }
 
   @override

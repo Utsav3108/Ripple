@@ -211,3 +211,36 @@ class ChallengeAttempt {
     );
   }
 }
+
+class ProfileAttemptLogItem {
+  final String challengeId;
+  final String challengeTitle;
+  final String personaName;
+  final bool won;
+  final DateTime createdAt;
+  final int challengeSessionId;
+
+  ProfileAttemptLogItem({
+    required this.challengeId,
+    required this.challengeTitle,
+    required this.personaName,
+    required this.won,
+    required this.createdAt,
+    required this.challengeSessionId,
+  });
+
+  factory ProfileAttemptLogItem.fromJson(Map<String, dynamic> json) {
+    return ProfileAttemptLogItem(
+      challengeId: json['challenge_id']?.toString() ?? '',
+      challengeTitle: json['challenge_title']?.toString() ?? '',
+      personaName: json['persona_name']?.toString() ?? '',
+      won: json['won'] is bool ? json['won'] as bool : false,
+      createdAt: json['created_at'] != null 
+          ? DateTime.parse(json['created_at']) 
+          : DateTime.now(),
+      challengeSessionId: json['challenge_session_id'] is int 
+          ? json['challenge_session_id'] as int 
+          : (int.tryParse(json['challenge_session_id']?.toString() ?? '') ?? 0),
+    );
+  }
+}

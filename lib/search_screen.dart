@@ -115,7 +115,7 @@ class _SearchScreenState extends State<SearchScreen> {
                             children: [
                               CircleAvatar(
                                 radius: 24,
-                                backgroundColor: const Color(0xFF2A2A2A),
+                                backgroundColor: cardColor,
                                 backgroundImage: persona.imageUrl != null && persona.imageUrl!.isNotEmpty
                                     ? CachedNetworkImageProvider(persona.imageUrl!)
                                     : null,

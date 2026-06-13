@@ -50,6 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<ChatProvider>();
     final mediaQuery = MediaQuery.of(context);
     final screenHeight = mediaQuery.size.height;
     final theme = Theme.of(context);
@@ -72,7 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   alignment: Alignment.topCenter,
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
-                      color: const Color(0xFF0D0D0D),
+                      color: theme.scaffoldBackgroundColor,
                       child: Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -117,7 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
               color: Colors.black,
               padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
               child: Center(
-                child: _isLoading
+                child: (_isLoading || provider.isLoading)
                     ? CircularProgressIndicator(
                         valueColor: AlwaysStoppedAnimation<Color>(accentColor),
                       )
@@ -131,7 +132,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               height: 54,
                               width: double.infinity,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1A1A1A),
+                                color: theme.colorScheme.surface,
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(color: Colors.white10),
                                 boxShadow: const [

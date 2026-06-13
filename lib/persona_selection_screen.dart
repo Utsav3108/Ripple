@@ -177,7 +177,7 @@ class _PersonaSelectionScreenState extends State<PersonaSelectionScreen> {
   }
 
   Widget _buildPersonaCard(Persona persona, Color cardColor, Color accentColor, {required bool isRecommended}) {
-    final recommendedBadgeColor = const Color(0xFFE6F58A); // Premium Lime color
+    final recommendedBadgeColor = accentColor; // Premium Lime color
     return InkWell(
       onTap: () => _selectPersona(persona),
       borderRadius: BorderRadius.circular(24),
@@ -208,7 +208,7 @@ class _PersonaSelectionScreenState extends State<PersonaSelectionScreen> {
                   children: [
                     Container(
                       width: double.infinity,
-                      color: const Color(0xFF2A2A2A),
+                      color: cardColor,
                       child: persona.imageUrl != null
                           ? Image.network(persona.imageUrl!, fit: BoxFit.cover, errorBuilder: (c, e, s) => _buildPlaceholder(persona.name[0]))
                           : _buildPlaceholder(persona.name[0]),
@@ -284,7 +284,7 @@ class _PersonaSelectionScreenState extends State<PersonaSelectionScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 54, color: Color(0xFFFF6B6B)),
+            Icon(Icons.error_outline, size: 54, color: theme.colorScheme.error),
             const SizedBox(height: 16),
             const Text(
               'Connection Lost',

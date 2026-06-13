@@ -212,7 +212,7 @@ class _ChallengeStatsScreenState extends State<ChallengeStatsScreen> {
                               _buildSummaryCard("Win Rate", "${winRate.toStringAsFixed(1)}%", accentColor, cardColor),
                               _buildSummaryCard("Total Attempts", "$totalAttempts", Colors.white, cardColor),
                               _buildSummaryCard("Wins / Losses", "$totalWins / $totalLosses", accentColor, cardColor),
-                              _buildSummaryCard("Best Time", _formatTime(bestTimeSeconds), const Color(0xFFE6F58A), cardColor),
+                              _buildSummaryCard("Best Time", _formatTime(bestTimeSeconds), accentColor, cardColor),
                             ],
                           ),
                           const SizedBox(height: 12),
@@ -305,12 +305,12 @@ class _ChallengeStatsScreenState extends State<ChallengeStatsScreen> {
                                       decoration: BoxDecoration(
                                         color: attempt.won 
                                             ? accentColor.withOpacity(0.1) 
-                                            : const Color(0xFFFF6B6B).withOpacity(0.1),
+                                            : theme.colorScheme.error.withOpacity(0.1),
                                         shape: BoxShape.circle,
                                       ),
                                       child: Icon(
                                         attempt.won ? Icons.emoji_events : Icons.cancel,
-                                        color: attempt.won ? accentColor : const Color(0xFFFF6B6B),
+                                        color: attempt.won ? accentColor : theme.colorScheme.error,
                                         size: 20,
                                       ),
                                     ),

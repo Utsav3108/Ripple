@@ -7,6 +7,7 @@ import 'challenge_stats_screen.dart';
 import 'search_screen.dart';
 import 'create_persona_screen.dart';
 import 'create_challenge_screen.dart';
+import 'Model/model.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -19,6 +20,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
   int _currentBottomNavIndex = 0;
   String _selectedTrack = 'All';
   String _searchQuery = '';
+  
+  bool _profileInitialized = false;
+  final TextEditingController _roleController = TextEditingController();
+  final TextEditingController _bioController = TextEditingController();
+
   final Map<String, List<String>> _trackMapping = {
     'Business & Career': ['Finance', 'Negotiation', 'Business Strategy', 'Entrepreneurship'],
     'Social & Rapport': ['Dating', 'Social Skills', 'Confidence', 'Emotional Intelligence', 'Conflict Resolution', 'Empathy'],
@@ -34,6 +40,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       provider.fetchChattedPersonas();
       provider.fetchChallenges();
       provider.fetchAllPersonas();
+      provider.fetchUserProfile();
     });
   }
 
@@ -46,6 +53,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
       provider.fetchChattedPersonas();
     } else if (index == 1) {
       provider.fetchChallenges();
+    } else if (index == 2) {
+      provider.fetchUserProfile();
     }
   }
 
@@ -58,7 +67,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ripple'),
-        actions: [
+        actions: const [
+          // Hidden for Phase 1 MVP
+          /*
           if (_currentBottomNavIndex == 0 || _currentBottomNavIndex == 1)
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
@@ -105,6 +116,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             onPressed: () {},
             icon: const Icon(Icons.notifications_none),
           ),
+          */
         ],
       ),
       body: Consumer<ChatProvider>(
@@ -248,70 +260,83 @@ class _ChatListScreenState extends State<ChatListScreen> {
       onRefresh: () => provider.fetchChattedPersonas(),
       color: accentColor,
       backgroundColor: cardColor,
-      child: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 0.8,
-        ),
-        itemCount: provider.chats.length,
-        itemBuilder: (context, index) {
-          final persona = provider.chats[index];
-          return InkWell(
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ChatScreen(persona: persona),
+      child: provider.chats.isEmpty
+          ? SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Container(
+                alignment: Alignment.center,
+                height: MediaQuery.of(context).size.height * 0.5,
+                child: const Text(
+                  'No personas chatted with yet.',
+                  style: TextStyle(color: Colors.white54, fontSize: 14),
                 ),
-              );
-              if (mounted) {
-                provider.fetchChattedPersonas();
-              }
-            },
-            borderRadius: BorderRadius.circular(24),
-            child: Container(
-              decoration: BoxDecoration(
-                color: cardColor,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 4)),
-                ],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                      child: Container(
-                        width: double.infinity,
-                        color: const Color(0xFF2A2A2A),
-                        child: persona.imageUrl != null
-                            ? Image.network(persona.imageUrl!, fit: BoxFit.cover, errorBuilder: (c, e, s) => _buildPlaceholder(persona.name[0]))
-                            : _buildPlaceholder(persona.name[0]),
+            )
+          : GridView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 0.8,
+              ),
+              itemCount: provider.chats.length,
+              itemBuilder: (context, index) {
+                final persona = provider.chats[index];
+                return InkWell(
+                  onTap: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ChatScreen(persona: persona),
                       ),
+                    );
+                    if (mounted) {
+                      provider.fetchChattedPersonas();
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: cardColor,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 4)),
+                      ],
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(12.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(persona.name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 4),
-                        Text(persona.desc, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                            child: Container(
+                              width: double.infinity,
+                              color: cardColor,
+                              child: persona.imageUrl != null
+                                  ? Image.network(persona.imageUrl!, fit: BoxFit.cover, errorBuilder: (c, e, s) => _buildPlaceholder(persona.name[0]))
+                                  : _buildPlaceholder(persona.name[0]),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(persona.name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                              const SizedBox(height: 4),
+                              Text(persona.desc, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
-          );
-        },
-      ),
     );
   }
 
@@ -343,23 +368,24 @@ class _ChatListScreenState extends State<ChatListScreen> {
       return matchesTrack && matchesSearch;
     }).toList();
 
-    if (filteredChallenges.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 40.0),
-          child: Text(
-            'No challenges found matching selection.',
-            style: TextStyle(color: Colors.white54, fontSize: 14),
-          ),
-        ),
-      );
-    }
-
     return RefreshIndicator(
       onRefresh: () => provider.fetchChallenges(),
       color: accentColor,
       backgroundColor: cardColor,
-      child: ListView.builder(
+      child: filteredChallenges.isEmpty
+          ? SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Container(
+                alignment: Alignment.center,
+                height: MediaQuery.of(context).size.height * 0.5,
+                child: const Text(
+                  'No challenges found matching selection.',
+                  style: TextStyle(color: Colors.white54, fontSize: 14),
+                ),
+              ),
+            )
+          : ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         itemCount: filteredChallenges.length,
         itemBuilder: (context, index) {
@@ -553,106 +579,316 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   Widget _buildProfileView(ChatProvider provider, Color accentColor, Color cardColor) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const SizedBox(height: 20),
-          // User Avatar Card
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: accentColor, width: 2),
-            ),
-            child: CircleAvatar(
-              radius: 60,
-              backgroundColor: const Color(0xFF2A2A2A),
-              child: Text(
-                provider.userName.isNotEmpty ? provider.userName[0].toUpperCase() : 'U',
-                style: const TextStyle(fontSize: 48, color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            provider.userName,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-          const Text(
-            'Premium Member',
-            style: TextStyle(fontSize: 14, color: Colors.white70),
-          ),
-          const SizedBox(height: 32),
-          // Stats Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildStatCard('Chats Started', '8', cardColor, accentColor),
-              _buildStatCard('Success Rate', '75%', cardColor, accentColor),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // Premium Info Panel
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: cardColor,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    if (!_profileInitialized && !provider.isProfileLoading && provider.userEmail.isNotEmpty) {
+      _roleController.text = provider.userRole;
+      _bioController.text = provider.userBio;
+      _profileInitialized = true;
+    }
+
+    if (provider.isProfileLoading && !_profileInitialized) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    // Settings defaults
+    final settings = provider.userSettings ?? {};
+
+    final hasChanges = _roleController.text != provider.userRole || _bioController.text != provider.userBio;
+
+    return RefreshIndicator(
+      onRefresh: () => provider.fetchUserProfile(),
+      color: accentColor,
+      backgroundColor: cardColor,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. Basic Profile Card
+            Center(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.white10),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 4)),
+                  ],
+                ),
+                child: Column(
                   children: [
-                    Icon(Icons.stars, color: accentColor),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Ripple Premium Active',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: accentColor, width: 2),
+                      ),
+                      child: CircleAvatar(
+                        radius: 44,
+                        backgroundColor: Colors.white10,
+                        backgroundImage: provider.userImageUrl.isNotEmpty
+                            ? NetworkImage(provider.userImageUrl)
+                            : null,
+                        child: provider.userImageUrl.isEmpty
+                            ? Text(provider.userName.isNotEmpty ? provider.userName[0].toUpperCase() : 'U', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white))
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      provider.userName,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      provider.userEmail.isNotEmpty ? provider.userEmail : 'No email associated',
+                      style: const TextStyle(fontSize: 13, color: Colors.white54),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: accentColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Active Strategy Rank',
+                        style: TextStyle(color: accentColor, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Access to unlimited dynamic personas, higher token generation, and advanced strategy challenges.',
-                  style: TextStyle(fontSize: 13, color: Colors.white70, height: 1.4),
-                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // 2. Stats Summary Row
+            Row(
+              children: [
+                Expanded(child: _buildSummaryItem('Challenges Attempted', '${provider.totalChallengesAttempted}', cardColor, accentColor)),
+                const SizedBox(width: 12),
+                Expanded(child: _buildSummaryItem('Success Rate', '${provider.successRatePercentage.toStringAsFixed(0)}%', cardColor, accentColor)),
+                const SizedBox(width: 12),
+                Expanded(child: _buildSummaryItem('Persona Chatted', '${provider.totalPracticeSessions}', cardColor, accentColor)),
               ],
             ),
-          ),
-          const SizedBox(height: 32),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                context.read<ChatProvider>().logout();
-              },
-              icon: const Icon(Icons.logout, color: Colors.redAccent, size: 18),
-              label: const Text(
-                'Logout',
-                style: TextStyle(color: Colors.redAccent, fontSize: 15, fontWeight: FontWeight.w600),
+            const SizedBox(height: 24),
+
+            // 3. Role & Background Context
+            const Text(
+              'ROLE & BACKGROUND CONTEXT',
+              style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: cardColor,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white10),
               ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.redAccent, width: 1),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Your Role (e.g. Product Manager)', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _roleController,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Add your professional or personal role...',
+                      hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+                      filled: true,
+                      fillColor: Colors.black38,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Short Biography / Context', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _bioController,
+                    maxLines: 3,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Share a brief bio or background context to personalize non-challenge chats...',
+                      hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+                      filled: true,
+                      fillColor: Colors.black38,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
+                  ),
+                  if (hasChanges) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 44,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          try {
+                            await provider.updateUserProfile(
+                              role: _roleController.text.trim(),
+                              bio: _bioController.text.trim(),
+                              settings: settings,
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Context updated successfully!'), backgroundColor: Colors.green),
+                            );
+                            setState(() {});
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error saving: $e'), backgroundColor: Colors.redAccent),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accentColor,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('Save Context Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // 5. Attempt Log
+            const Text(
+              'RECENT CHALLENGE ATTEMPTS',
+              style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            ),
+            const SizedBox(height: 10),
+            provider.profileAttemptsLog.isEmpty
+                ? Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: cardColor,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: const Column(
+                      children: [
+                        Icon(Icons.history, color: Colors.white30, size: 40),
+                        SizedBox(height: 12),
+                        Text(
+                          'No challenges attempted yet.',
+                          style: TextStyle(color: Colors.white38, fontSize: 14),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: provider.profileAttemptsLog.length,
+                    itemBuilder: (context, index) {
+                      final item = provider.profileAttemptsLog[index];
+                      final dateString = "${item.createdAt.day}/${item.createdAt.month}/${item.createdAt.year}";
+                      final badgeColor = item.won ? accentColor : Colors.redAccent;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: badgeColor.withOpacity(0.08),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  item.won ? Icons.emoji_events : Icons.cancel,
+                                  color: badgeColor,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.challengeTitle,
+                                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      "Opponent: ${item.personaName} • $dateString",
+                                      style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: badgeColor.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  item.won ? 'WON' : 'FAILED',
+                                  style: TextStyle(color: badgeColor, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+            const SizedBox(height: 32),
+
+            // Logout Button
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  context.read<ChatProvider>().logout();
+                },
+                icon: const Icon(Icons.logout, color: Colors.redAccent, size: 18),
+                label: const Text(
+                  'Logout',
+                  style: TextStyle(color: Colors.redAccent, fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.redAccent, width: 1),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildStatCard(String label, String value, Color cardColor, Color accentColor) {
+  Widget _buildSummaryItem(String label, String value, Color cardColor, Color accentColor) {
     return Container(
-      width: 140,
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(20),
@@ -662,12 +898,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
         children: [
           Text(
             value,
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: accentColor),
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: accentColor),
           ),
           const SizedBox(height: 6),
           Text(
             label,
-            style: const TextStyle(fontSize: 12, color: Colors.white54),
+            style: const TextStyle(fontSize: 10, color: Colors.white54),
             textAlign: TextAlign.center,
           ),
         ],

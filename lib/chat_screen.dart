@@ -38,7 +38,6 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _showChallengeSelectionOverlay = false;
   bool _showPersonaSelectionOverlay = false;
   Challenge? _selectedNextChallenge;
-  bool _isLoadingNextChallenges = false;
 
   @override
   void initState() {
@@ -230,7 +229,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF161616),
+      backgroundColor: theme.colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -267,7 +266,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           color: isWin 
                               ? accentColor 
                               : isLose 
-                                  ? const Color(0xFFFF6B6B) 
+                                  ? theme.colorScheme.error 
                                   : Colors.white,
                           fontWeight: FontWeight.w600,
                         ),
@@ -314,9 +313,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _showChallengeCompletedOverlay(String status, String reason, int attemptCount) {
     final isWin = status.startsWith('won') || status == 'won_objective_completed';
+    final theme = Theme.of(context);
     
     final title = isWin ? '🏆 Challenge Completed' : '❌ Challenge Failed';
-    final titleColor = isWin ? const Color(0xFFE6F58A) : const Color(0xFFFF6B6B);
+    final titleColor = isWin ? theme.colorScheme.primary : theme.colorScheme.error;
     final icon = isWin ? Icons.emoji_events : Icons.cancel;
 
     showGeneralDialog(
@@ -334,7 +334,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 margin: const EdgeInsets.symmetric(horizontal: 24),
                 padding: const EdgeInsets.all(32),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF141414),
+                  color: theme.colorScheme.surface,
                   borderRadius: BorderRadius.circular(28),
                   border: Border.all(color: titleColor.withOpacity(0.3), width: 1.5),
                   boxShadow: [
@@ -411,22 +411,12 @@ class _ChatScreenState extends State<ChatScreen> {
                         onPressed: () {
                           Navigator.pop(dialogContext); // Close dialog
                           
-                          // Load challenges and personas
                           setState(() {
-                            _isLoadingNextChallenges = true;
+                            _showChallengeSelectionOverlay = true;
                           });
                           final chatProvider = context.read<ChatProvider>();
-                          Future.wait([
-                            chatProvider.fetchChallenges(),
-                            chatProvider.fetchAllPersonas(),
-                          ]).then((_) {
-                            if (mounted) {
-                              setState(() {
-                                _isLoadingNextChallenges = false;
-                                _showChallengeSelectionOverlay = true;
-                              });
-                            }
-                          });
+                          chatProvider.fetchChallenges();
+                          chatProvider.fetchAllPersonas();
                         },
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.white,
@@ -483,6 +473,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildStorylineCard(ThemeData theme, Map<String, dynamic> intro) {
     final cta = intro['call_to_action'] as String? ?? '';
+    final endGoal = intro['end_goal'] as String? ?? '';
 
     return Center(
       child: GestureDetector(
@@ -492,7 +483,7 @@ class _ChatScreenState extends State<ChatScreen> {
           margin: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: const Color(0xFF151515),
+            color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2), width: 1),
             boxShadow: [
@@ -515,21 +506,49 @@ class _ChatScreenState extends State<ChatScreen> {
                 size: 28
               ),
               const SizedBox(height: 12),
+              
+              if (endGoal.isNotEmpty) ...[
+                Text(
+                  "END GOAL",
+                  style: TextStyle(
+                    color: theme.colorScheme.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  endGoal,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Divider(color: Colors.white10, height: 1),
+                ),
+              ],
+
               Text(
                 "CHALLENGE STORYLINE",
                 style: TextStyle(
-                  color: theme.colorScheme.primary,
-                  fontSize: 12,
+                  color: theme.colorScheme.primary.withOpacity(0.8),
+                  fontSize: 11,
                   fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
+                  letterSpacing: 1.2,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Text(
                 _displayedStorylineText,
                 style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
+                  color: Colors.white70,
+                  fontSize: 13,
                   height: 1.5,
                 ),
                 textAlign: TextAlign.center,
@@ -552,7 +571,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: Divider(color: Colors.white24, height: 1),
                 ),
                 Text(
-                  "OBJECTIVE",
+                  "FIRST MOVE",
                   style: TextStyle(
                     color: theme.colorScheme.primary.withOpacity(0.8),
                     fontSize: 11,
@@ -593,7 +612,7 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundColor: const Color(0xFF2A2A2A),
+              backgroundColor: theme.colorScheme.surface,
               backgroundImage: _activePersona.imageUrl != null && _activePersona.imageUrl!.isNotEmpty
                   ? CachedNetworkImageProvider(_activePersona.imageUrl!)
                   : null,
@@ -653,7 +672,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     children: [
                       CircularProgressIndicator(color: accentColor),
                       const SizedBox(height: 16),
-                      const Text('Setting up diplomatic challenge...', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                      const Text('Setting up challenge, please wait...', style: TextStyle(color: Colors.white70, fontSize: 14)),
                     ],
                   ),
                 )
@@ -690,7 +709,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   margin: const EdgeInsets.only(bottom: 12),
                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                   decoration: BoxDecoration(
-                                    color: isMe ? accentColor : const Color(0xFF1A1A1A),
+                                    color: isMe ? accentColor : theme.colorScheme.surface,
                                     borderRadius: BorderRadius.only(
                                       topLeft: const Radius.circular(16),
                                       topRight: const Radius.circular(16),
@@ -739,11 +758,13 @@ class _ChatScreenState extends State<ChatScreen> {
                             Expanded(
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF1A1A1A),
+                                  color: theme.colorScheme.surface,
                                   borderRadius: BorderRadius.circular(24),
                                 ),
                                 child: TextField(
                                   controller: _messageController,
+                                  minLines: 1,
+                                  maxLines: 3,
                                   style: const TextStyle(color: Colors.white),
                                   decoration: const InputDecoration(
                                     hintText: 'Type a message...',
@@ -780,25 +801,6 @@ class _ChatScreenState extends State<ChatScreen> {
           // Persona Selection Overlay
           if (_showPersonaSelectionOverlay)
             _buildPersonaSelectionOverlay(context, provider),
-
-          // Loading next challenges spinner
-          if (_isLoadingNextChallenges)
-            Container(
-              color: Colors.black87,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(color: accentColor),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Loading next challenges...',
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -808,7 +810,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final cleanStatus = status?.toLowerCase() ?? 'abandoned';
     final isWin = cleanStatus.startsWith('won') || cleanStatus == 'won_objective_completed';
     
-    final cardColor = const Color(0xFF141414);
+    final cardColor = theme.colorScheme.surface;
     
     // Result icon, title, description mappings
     IconData icon;
@@ -818,7 +820,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     if (isWin) {
       icon = Icons.emoji_events;
-      statusColor = const Color(0xFFE6F58A); // Premium Lime color
+      statusColor = theme.colorScheme.primary; // Premium Lime color
       title = "🏆 Challenge Won";
       description = cleanStatus == 'won_objective_completed' 
           ? "Persona agreed to the objective." 
@@ -830,7 +832,7 @@ class _ChatScreenState extends State<ChatScreen> {
       description = "Strategic session was called off.";
     } else {
       icon = Icons.cancel;
-      statusColor = const Color(0xFFFF6B6B); // Coral/Red color
+      statusColor = theme.colorScheme.error; // Coral/Red color
       title = "❌ Challenge Failed";
       
       if (cleanStatus == 'lost_timeout') {
@@ -931,7 +933,7 @@ class _ChatScreenState extends State<ChatScreen> {
         .toList();
 
     return Container(
-      color: const Color(0xFA0F0F0F), // Sleek, premium dark color with 98% opacity
+      color: theme.scaffoldBackgroundColor.withOpacity(0.98), // Sleek, premium dark color with 98% opacity
       child: SafeArea(
         child: Column(
           children: [
@@ -964,14 +966,18 @@ class _ChatScreenState extends State<ChatScreen> {
             
             // List of challenges
             Expanded(
-              child: nextChallenges.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No other challenges available.',
-                        style: TextStyle(color: Colors.white54, fontSize: 16),
-                      ),
+              child: provider.isChallengesLoading
+                  ? Center(
+                      child: CircularProgressIndicator(color: accentColor),
                     )
-                  : ListView.builder(
+                  : nextChallenges.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No other challenges available.',
+                            style: TextStyle(color: Colors.white54, fontSize: 16),
+                          ),
+                        )
+                      : ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: nextChallenges.length,
                       itemBuilder: (context, index) {
@@ -984,7 +990,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(20),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF161616),
+                                color: theme.colorScheme.surface,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(color: Colors.white10),
                               ),
@@ -1092,7 +1098,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildPersonaSelectionOverlay(BuildContext context, ChatProvider provider) {
     final theme = Theme.of(context);
-    final cardColor = const Color(0xFF161616);
+    final cardColor = theme.colorScheme.surface;
     final accentColor = theme.colorScheme.primary;
     final challenge = _selectedNextChallenge;
 
@@ -1110,7 +1116,7 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     return Container(
-      color: const Color(0xFA0F0F0F),
+      color: theme.scaffoldBackgroundColor.withOpacity(0.98),
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1194,7 +1200,11 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
 
             Expanded(
-              child: GridView.builder(
+              child: provider.isLoading && provider.allPersonas.isEmpty
+                  ? Center(
+                      child: CircularProgressIndicator(color: accentColor),
+                    )
+                  : GridView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
@@ -1217,7 +1227,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildPersonaCardItem(Persona persona, Color cardColor, Color accentColor, bool isRecommended) {
-    final recommendedBadgeColor = const Color(0xFFE6F58A);
+    final recommendedBadgeColor = accentColor;
     return InkWell(
       onTap: () => _handlePersonaSelectedForNextChallenge(persona),
       borderRadius: BorderRadius.circular(24),
@@ -1248,7 +1258,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   children: [
                     Container(
                       width: double.infinity,
-                      color: const Color(0xFF2A2A2A),
+                      color: cardColor,
                       child: persona.imageUrl != null && persona.imageUrl!.isNotEmpty
                           ? CachedNetworkImage(
                               imageUrl: persona.imageUrl!,
