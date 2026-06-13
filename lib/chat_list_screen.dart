@@ -8,6 +8,7 @@ import 'search_screen.dart';
 import 'create_persona_screen.dart';
 import 'create_challenge_screen.dart';
 import 'Model/model.dart';
+import 'category_challenges_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -39,6 +40,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       final provider = context.read<ChatProvider>();
       provider.fetchChattedPersonas();
       provider.fetchChallenges();
+      provider.fetchActiveSessions();
       provider.fetchAllPersonas();
       provider.fetchUserProfile();
     });
@@ -53,6 +55,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       provider.fetchChattedPersonas();
     } else if (index == 1) {
       provider.fetchChallenges();
+      provider.fetchActiveSessions();
     } else if (index == 2) {
       provider.fetchUserProfile();
     }
@@ -67,57 +70,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ripple'),
-        actions: const [
-          // Hidden for Phase 1 MVP
-          /*
-          if (_currentBottomNavIndex == 0 || _currentBottomNavIndex == 1)
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: Center(
-                child: InkWell(
-                  onTap: () {
-                    if (_currentBottomNavIndex == 0) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const CreatePersonaScreen(),
-                        ),
-                      );
-                    } else {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const CreateChallengeScreen(),
-                        ),
-                      );
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: accentColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: accentColor.withOpacity(0.3), width: 1),
-                    ),
-                    child: Text(
-                      "+ Create",
-                      style: TextStyle(
-                        color: accentColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none),
-          ),
-          */
-        ],
       ),
       body: Consumer<ChatProvider>(
         builder: (context, provider, child) {
@@ -159,50 +111,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 ],
               ),
               // Tab 1: Challenges Tab
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(left: 16.0, top: 16.0, bottom: 8.0),
-                    child: Text(
-                      'Strategy Challenges',
-                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  // Search Bar
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: cardColor,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white10),
-                      ),
-                      child: TextField(
-                        onChanged: (val) {
-                          setState(() {
-                            _searchQuery = val;
-                          });
-                        },
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: 'Search challenges...',
-                          hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
-                          prefixIcon: Icon(Icons.search, color: accentColor, size: 20),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Curriculum Track Filters
-                  _buildTrackFilterRow(provider, accentColor, cardColor),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: _buildChallengesList(provider, accentColor, cardColor),
-                  ),
-                ],
-              ),
+              _buildChallengesList(provider, accentColor, cardColor),
               // Tab 2: Profile Tab
               _buildProfileView(provider, accentColor, cardColor),
             ],
@@ -340,183 +249,519 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
-  Widget _buildChallengesList(ChatProvider provider, Color accentColor, Color cardColor) {
-    if (provider.isChallengesLoading && provider.challenges.isEmpty) {
-      return Center(child: CircularProgressIndicator(color: accentColor));
+  final List<CategoryItem> _categoriesList = [
+    CategoryItem('Business & Career', ['Finance', 'Business Strategy', 'Startup', 'Business'], Icons.business_center, [Colors.blue.shade900, Colors.black]),
+    CategoryItem('Social & Rapport', ['Social Skills', 'Confidence', 'Emotional Intelligence', 'Conflict Resolution', 'Empathy', 'Social'], Icons.people, [Colors.purple.shade900, Colors.black]),
+    CategoryItem('Dating', ['Dating'], Icons.favorite, [Colors.red.shade900, Colors.black]),
+    CategoryItem('Leadership', ['Leadership'], Icons.star, [Colors.amber.shade900, Colors.black]),
+    CategoryItem('Negotiation', ['Negotiation'], Icons.handshake, [Colors.teal.shade900, Colors.black]),
+    CategoryItem('Politics', ['Politics', 'Science'], Icons.gavel, [Colors.indigo.shade900, Colors.black]),
+    CategoryItem('Courtroom', ['Courtroom Drama', 'Courtroom', 'Critical Thinking'], Icons.balance, [Colors.amber.shade700, Colors.black87]),
+    CategoryItem('Entrepreneurship', ['Entrepreneurship', 'Public Speaking', 'Persuasion', 'Startup'], Icons.lightbulb, [Colors.deepOrange.shade900, Colors.black]),
+  ];
+
+  List<Challenge> getTrendingChallenges(ChatProvider provider) {
+    return provider.challenges.where((c) => c.difficulty == 'intermediate' || c.difficulty == 'advance').toList();
+  }
+
+  List<Challenge> getRecommendedChallenges(ChatProvider provider) {
+    return provider.challenges.where((c) => c.difficulty == 'beginner' || c.difficulty == 'intermediate').toList();
+  }
+
+  List<Challenge> getRecentlyAddedChallenges(ChatProvider provider) {
+    return provider.challenges.reversed.toList();
+  }
+
+  String getChallengeCTA(ChatProvider provider, Challenge challenge) {
+    final isActive = provider.activeSessions.any((s) => s.challengeId == challenge.id);
+    if (isActive) return 'Resume';
+    
+    final attemptCount = provider.challengeAttemptCounts[challenge.id] ?? 0;
+    if (attemptCount > 0) return 'Play Again';
+    
+    return 'Start Challenge';
+  }
+
+  void _onChallengeTap(BuildContext context, ChatProvider provider, Challenge challenge) async {
+    // 1. Check if there is an active session for this challenge to resume it directly
+    ChallengeSession? activeSession;
+    try {
+      activeSession = provider.activeSessions.firstWhere((s) => s.challengeId == challenge.id);
+    } catch (_) {
+      activeSession = null;
     }
 
-    final filteredChallenges = provider.challenges.where((challenge) {
-      // 1. Domain Track Filter
-      bool matchesTrack = false;
-      if (_selectedTrack == 'All') {
-        matchesTrack = true;
-      } else {
-        final allowedSubCategories = _trackMapping[_selectedTrack] ?? [];
-        if (challenge.categories != null) {
-          matchesTrack = challenge.categories!.any((cat) => allowedSubCategories.contains(cat));
-        }
+    if (activeSession != null) {
+      var persona = provider.getPersonaById(activeSession.personaId);
+      if (persona == null) {
+        // Try fetching all personas to make sure they are loaded
+        await provider.fetchAllPersonas();
+        persona = provider.getPersonaById(activeSession.personaId);
+      }
+      
+      // Fallback: construct a Persona object dynamically if it's still null (e.g. not loaded/custom)
+      if (persona == null) {
+        persona = Persona(
+          id: activeSession.personaId,
+          name: 'Opponent',
+          desc: 'Active Challenge Scenario',
+        );
       }
 
-      // 2. Search Query Filter
-      final matchesSearch = _searchQuery.isEmpty ||
-          challenge.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          (challenge.context?.goal != null &&
-              challenge.context!.goal.toLowerCase().contains(_searchQuery.toLowerCase())) ||
-          (challenge.categories != null &&
-              challenge.categories!.any((cat) => cat.toLowerCase().contains(_searchQuery.toLowerCase())));
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ChatScreen(
+            persona: persona!,
+            challenge: challenge,
+          ),
+        ),
+      );
+      if (mounted) {
+        provider.fetchChattedPersonas();
+        provider.fetchActiveSessions();
+      }
+      return;
+    }
 
-      return matchesTrack && matchesSearch;
-    }).toList();
+    // 2. No active session, check if challenge has a pre-determined persona
+    if (challenge.selectedPersonaId != null) {
+      final persona = provider.getPersonaById(challenge.selectedPersonaId!);
+      if (persona != null) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatScreen(
+              persona: persona,
+              challenge: challenge,
+            ),
+          ),
+        );
+        if (mounted) {
+          provider.fetchChattedPersonas();
+          provider.fetchActiveSessions();
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Persona details for challenge not loaded yet.')),
+        );
+      }
+    } else {
+      // 3. Otherwise, select a persona for the new attempt
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PersonaSelectionScreen(
+            challenge: challenge,
+          ),
+        ),
+      );
+      if (mounted) {
+        provider.fetchChattedPersonas();
+        provider.fetchActiveSessions();
+      }
+    }
+  }
 
-    return RefreshIndicator(
-      onRefresh: () => provider.fetchChallenges(),
-      color: accentColor,
-      backgroundColor: cardColor,
-      child: filteredChallenges.isEmpty
-          ? SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Container(
-                alignment: Alignment.center,
-                height: MediaQuery.of(context).size.height * 0.5,
-                child: const Text(
-                  'No challenges found matching selection.',
-                  style: TextStyle(color: Colors.white54, fontSize: 14),
+  Challenge? getChallengeForSession(ChatProvider provider, ChallengeSession session) {
+    try {
+      return provider.challenges.firstWhere((c) => c.id == session.challengeId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Challenge? getDailyChallenge(ChatProvider provider) {
+    if (provider.challenges.isEmpty) return null;
+    try {
+      return provider.challenges.firstWhere((c) => c.id == 'courtroom_self_defense');
+    } catch (_) {
+      return provider.challenges.first;
+    }
+  }
+
+  Widget _buildContinuePlayingSection(BuildContext context, ChatProvider provider, Color accentColor, Color cardColor) {
+    if (provider.activeSessions.isEmpty) return const SizedBox.shrink();
+
+    final isSingle = provider.activeSessions.length == 1;
+
+    Widget buildCard(ChallengeSession session, {double? width}) {
+      final challenge = getChallengeForSession(provider, session);
+      if (challenge == null) return const SizedBox.shrink();
+
+      final attemptCount = provider.challengeAttemptCounts[challenge.id] ?? 0;
+      
+      if (!provider.challengeAttemptCounts.containsKey(challenge.id)) {
+        provider.fetchAttemptCountForChallenge(challenge.id);
+      }
+
+      return Container(
+        width: width,
+        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white10),
+          boxShadow: const [
+            BoxShadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 3)),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 55,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [accentColor.withOpacity(0.25), Colors.black],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
               ),
-            )
-          : ListView.builder(
-              physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        itemCount: filteredChallenges.length,
-        itemBuilder: (context, index) {
-          final challenge = filteredChallenges[index];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 16.0),
-            child: InkWell(
-              onTap: () async {
-                if (challenge.selectedPersonaId != null) {
-                  final persona = provider.getPersonaById(challenge.selectedPersonaId!);
-                  if (persona != null) {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ChatScreen(
-                          persona: persona,
-                          challenge: challenge,
-                        ),
-                      ),
-                    );
-                    if (mounted) {
-                      provider.fetchChattedPersonas();
-                    }
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Persona details for challenge not loaded yet.')),
-                    );
-                  }
-                } else {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => PersonaSelectionScreen(
-                        challenge: challenge,
-                      ),
-                    ),
-                  );
-                  if (mounted) {
-                    provider.fetchChattedPersonas();
-                  }
-                }
-              },
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: cardColor,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 4)),
-                  ],
-                ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              alignment: Alignment.centerLeft,
+              child: Text(
+                challenge.title,
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      challenge.title,
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      challenge.context?.goal ?? "No description available",
+                      challenge.subtitle ?? challenge.context?.goal ?? "Resume your active strategy scenario.",
                       style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 12),
-                    if (challenge.categories != null && challenge.categories!.isNotEmpty) ...[
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: challenge.categories!.map((cat) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.04),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.white10, width: 0.8),
-                            ),
-                            child: Text(
-                              cat,
-                              style: const TextStyle(
-                                color: Colors.white54,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          "Tap to play",
-                          style: TextStyle(color: Colors.white38, fontSize: 11),
+                        Text(
+                          "Attempt #${attemptCount + 1}",
+                          style: const TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w500),
                         ),
-                        GestureDetector(
-                          onTap: () {
-                            // Navigate to Challenge Stats Screen
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ChallengeStatsScreen(challenge: challenge),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: accentColor.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: accentColor.withOpacity(0.3), width: 1),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.bar_chart, size: 12, color: accentColor),
-                                const SizedBox(width: 4),
-                                Text(
-                                  "View Stats",
-                                  style: TextStyle(color: accentColor, fontSize: 11, fontWeight: FontWeight.bold),
-                                ),
-                              ],
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: Text(
+                            (challenge.difficulty ?? 'medium').toUpperCase(),
+                            style: TextStyle(
+                              color: challenge.difficulty == 'advance'
+                                  ? Colors.redAccent
+                                  : challenge.difficulty == 'intermediate'
+                                      ? Colors.orangeAccent
+                                      : accentColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
                       ],
+                    ),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 42,
+                      child: ElevatedButton(
+                        onPressed: () => _onChallengeTap(context, provider, challenge),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: accentColor,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Resume Challenge',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isSingle) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Text(
+              'Continue Playing',
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: SizedBox(
+              height: 210,
+              width: double.infinity,
+              child: buildCard(provider.activeSessions.first),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Text(
+            'Continue Playing',
+            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+        SizedBox(
+          height: 210,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: provider.activeSessions.length,
+            itemBuilder: (context, index) {
+              return buildCard(provider.activeSessions[index], width: 280);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDailyChallenge(BuildContext context, ChatProvider provider, Color accentColor, Color cardColor) {
+    final challenge = getDailyChallenge(provider);
+    if (challenge == null) return const SizedBox.shrink();
+    
+    final ctaText = getChallengeCTA(provider, challenge);
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: accentColor.withOpacity(0.4), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: accentColor.withOpacity(0.12), blurRadius: 16, offset: const Offset(0, 4)),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.calendar_today, size: 12, color: accentColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        "DAILY CHALLENGE",
+                        style: TextStyle(color: accentColor, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                      ),
+                    ],
+                  ),
+                ),
+                Row(
+                  children: [
+                    const Icon(Icons.emoji_events, size: 14, color: Colors.amber),
+                    const SizedBox(width: 4),
+                    Text(
+                      "+150 XP",
+                      style: TextStyle(color: Colors.amber.shade300, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              challenge.title,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              challenge.shortDescription ?? challenge.context?.goal ?? "A high-stakes daily conversation test to level up your social intelligence.",
+              style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: ElevatedButton(
+                onPressed: () => _onChallengeTap(context, provider, challenge),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: ctaText == 'Resume' ? accentColor : Colors.white.withOpacity(0.06),
+                  foregroundColor: ctaText == 'Resume' ? Colors.black : Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: ctaText == 'Resume' ? Colors.transparent : Colors.white24),
+                  ),
+                  elevation: 0,
+                ),
+                child: Text(
+                  ctaText,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCarousel(ChatProvider provider, List<Challenge> challenges, Color accentColor, Color cardColor, {bool isTrending = false}) {
+    return SizedBox(
+      height: 190,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemCount: challenges.length,
+        itemBuilder: (context, index) {
+          final challenge = challenges[index];
+          final ctaText = getChallengeCTA(provider, challenge);
+          
+          if (!provider.challengeAttemptCounts.containsKey(challenge.id)) {
+            provider.fetchAttemptCountForChallenge(challenge.id);
+          }
+
+          return Container(
+            width: 220,
+            margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white10),
+              boxShadow: const [
+                BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 3)),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => _onChallengeTap(context, provider, challenge),
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        if (isTrending)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.local_fire_department, size: 10, color: Colors.redAccent),
+                                const SizedBox(width: 2),
+                                Text(
+                                  "🔥 #${index + 1} Trending",
+                                  style: const TextStyle(color: Colors.redAccent, fontSize: 8, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          )
+                        else if (challenge.categories != null && challenge.categories!.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: accentColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              challenge.categories!.first,
+                              style: TextStyle(color: accentColor, fontSize: 8, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        Text(
+                          (challenge.difficulty ?? 'medium').toUpperCase(),
+                          style: TextStyle(
+                            color: challenge.difficulty == 'advance'
+                                ? Colors.redAccent
+                                : challenge.difficulty == 'intermediate'
+                                    ? Colors.orangeAccent
+                                    : accentColor,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            challenge.title,
+                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            challenge.subtitle ?? challenge.context?.goal ?? "Master this conversation",
+                            style: const TextStyle(color: Colors.white54, fontSize: 10, height: 1.3),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 32,
+                      child: ElevatedButton(
+                        onPressed: () => _onChallengeTap(context, provider, challenge),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: ctaText == 'Resume' ? accentColor : Colors.white.withOpacity(0.06),
+                          foregroundColor: ctaText == 'Resume' ? Colors.black : Colors.white70,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(color: ctaText == 'Resume' ? Colors.transparent : Colors.white12),
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                        child: Text(
+                          ctaText,
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -528,52 +773,185 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
-  Widget _buildTrackFilterRow(ChatProvider provider, Color accentColor, Color cardColor) {
-    final tracks = ['All', ..._trackMapping.keys];
-
-    return SizedBox(
-      height: 44,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
-        itemCount: tracks.length,
-        itemBuilder: (context, index) {
-          final track = tracks[index];
-          final isSelected = track == _selectedTrack;
-          
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+  Widget _buildCategoryGrid(Color cardColor, Color accentColor) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 1.6,
+      ),
+      itemCount: _categoriesList.length,
+      itemBuilder: (context, index) {
+        final item = _categoriesList[index];
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: LinearGradient(
+              colors: item.gradientColors,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: Colors.white10),
+            boxShadow: const [
+              BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Material(
+            color: Colors.transparent,
             child: InkWell(
               onTap: () {
-                setState(() {
-                  _selectedTrack = track;
-                });
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CategoryChallengesScreen(
+                      categoryName: item.name,
+                      keywords: item.keywords,
+                    ),
+                  ),
+                );
               },
-              borderRadius: BorderRadius.circular(20),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isSelected ? accentColor : cardColor,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isSelected ? accentColor : Colors.white10,
-                    width: 1,
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  track,
-                  style: TextStyle(
-                    color: isSelected ? Colors.black : Colors.white70,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    fontSize: 12,
-                  ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Icon(item.icon, color: accentColor, size: 24),
+                    Text(
+                      item.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          );
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildChallengesList(ChatProvider provider, Color accentColor, Color cardColor) {
+    if (provider.isChallengesLoading && provider.challenges.isEmpty) {
+      return Center(child: CircularProgressIndicator(color: accentColor));
+    }
+
+    if (provider.challenges.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: () async {
+          await provider.fetchChallenges();
+          await provider.fetchActiveSessions();
         },
+        color: accentColor,
+        backgroundColor: cardColor,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Container(
+            alignment: Alignment.center,
+            height: MediaQuery.of(context).size.height * 0.5,
+            child: const Text(
+              'No challenges found. Pull to refresh.',
+              style: TextStyle(color: Colors.white54, fontSize: 14),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final trending = getTrendingChallenges(provider);
+    final recommended = getRecommendedChallenges(provider);
+    final recentlyAdded = getRecentlyAddedChallenges(provider);
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        await provider.fetchChallenges();
+        await provider.fetchActiveSessions();
+      },
+      color: accentColor,
+      backgroundColor: cardColor,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 16),
+            // 1. Continue Playing (Highest Priority)
+            if (provider.activeSessions.isNotEmpty) ...[
+              _buildContinuePlayingSection(context, provider, accentColor, cardColor),
+              const SizedBox(height: 16),
+            ],
+
+            // 2. Daily Challenge
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Text(
+                'Daily Challenge',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            _buildDailyChallenge(context, provider, accentColor, cardColor),
+            const SizedBox(height: 16),
+
+            // 3. Trending Challenges
+            if (trending.isNotEmpty) ...[
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Text(
+                  'Trending Challenges',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              _buildCarousel(provider, trending, accentColor, cardColor, isTrending: true),
+              const SizedBox(height: 16),
+            ],
+
+            // 4. Recommended For You
+            if (recommended.isNotEmpty) ...[
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Text(
+                  'Recommended For You',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              _buildCarousel(provider, recommended, accentColor, cardColor),
+              const SizedBox(height: 16),
+            ],
+
+            // 5. Recently Added
+            if (recentlyAdded.isNotEmpty) ...[
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Text(
+                  'Recently Added',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              _buildCarousel(provider, recentlyAdded, accentColor, cardColor),
+              const SizedBox(height: 16),
+            ],
+
+            // 6. Categories
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Text(
+                'Browse Categories',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            _buildCategoryGrid(cardColor, accentColor),
+            const SizedBox(height: 32),
+          ],
+        ),
       ),
     );
   }
@@ -888,13 +1266,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   Widget _buildSummaryItem(String label, String value, Color cardColor, Color accentColor) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+      height: 100,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white10),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
             value,
@@ -914,4 +1294,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
   Widget _buildPlaceholder(String char) {
     return Center(child: Text(char, style: const TextStyle(fontSize: 40, color: Colors.white)));
   }
+}
+
+class CategoryItem {
+  final String name;
+  final List<String> keywords;
+  final IconData icon;
+  final List<Color> gradientColors;
+
+  CategoryItem(this.name, this.keywords, this.icon, this.gradientColors);
 }

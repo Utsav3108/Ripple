@@ -5,12 +5,11 @@ import '../Network/network_manager.dart';
 import '../Network/socket_manager.dart';
 import '../Model/model.dart';
 import '../core/config/app_config.dart';
-
 class ChatProvider with ChangeNotifier {
   final Network _network = Network();
   final SocketManager _socketManager = SocketManager();
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
-  
+
   List<Persona> _chats = [];
   List<Message> _messages = [];
   List<Persona> _searchResults = [];
@@ -27,13 +26,20 @@ class ChatProvider with ChangeNotifier {
   int _totalPracticeSessions = 0;
   List<ProfileAttemptLogItem> _profileAttemptsLog = [];
   bool _isProfileLoading = false;
-  
   bool _isLoading = false;
   bool _isMessagesLoading = false;
   bool _isSearching = false;
   bool _isChallengesLoading = false;
   String? _errorMessage;
   int? _activePersonaId;
+
+  List<ChallengeSession> _activeSessions = [];
+  List<ChallengeSession> get activeSessions => _activeSessions;
+  bool _isActiveSessionsLoading = false;
+  bool get isActiveSessionsLoading => _isActiveSessionsLoading;
+
+  final Map<String, int> _challengeAttemptCounts = {};
+  Map<String, int> get challengeAttemptCounts => _challengeAttemptCounts;
 
   List<Persona> get chats => _chats;
   List<Message> get messages => _messages;
@@ -180,6 +186,44 @@ class ChatProvider with ChangeNotifier {
     } finally {
       _isChallengesLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> fetchActiveSessions() async {
+    _isActiveSessionsLoading = true;
+    notifyListeners();
+    try {
+      final request = Request(
+        url: '/challenge-sessions/active',
+        method: HTTPMethod.GET,
+      );
+      final response = await _network.performRequest(request);
+      if (response.data is List) {
+        _activeSessions = (response.data as List)
+            .map((json) => ChallengeSession.fromJson(json))
+            .toList();
+            
+        // Pre-fetch attempt counts for any active sessions
+        for (var session in _activeSessions) {
+          fetchAttemptCountForChallenge(session.challengeId);
+        }
+      }
+    } catch (e) {
+      print("Error fetching active sessions: $e");
+    } finally {
+      _isActiveSessionsLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchAttemptCountForChallenge(String challengeId) async {
+    if (_challengeAttemptCounts.containsKey(challengeId)) return;
+    try {
+      final attempts = await fetchChallengeAttempts(challengeId);
+      _challengeAttemptCounts[challengeId] = attempts.length;
+      notifyListeners();
+    } catch (e) {
+      print("Error fetching attempts for challenge $challengeId: $e");
     }
   }
 
@@ -374,6 +418,7 @@ class ChatProvider with ChangeNotifier {
         // Fetch data
         await fetchChattedPersonas();
         await fetchChallenges();
+        await fetchActiveSessions();
         await fetchAllPersonas();
       }
     } catch (e) {
@@ -408,6 +453,7 @@ class ChatProvider with ChangeNotifier {
                 _socketManager.connect(_currentUserId!);
                 await fetchChattedPersonas();
                 await fetchChallenges();
+                await fetchActiveSessions();
                 await fetchAllPersonas();
                 await fetchUserProfile();
               }
@@ -472,6 +518,7 @@ class ChatProvider with ChangeNotifier {
         // Fetch data
         await fetchChattedPersonas();
         await fetchChallenges();
+        await fetchActiveSessions();
         await fetchAllPersonas();
         await fetchUserProfile();
       }

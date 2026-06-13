@@ -244,3 +244,44 @@ class ProfileAttemptLogItem {
     );
   }
 }
+
+class ChallengeSession {
+  final int id;
+  final int userId;
+  final String challengeId;
+  final int personaId;
+  final String status;
+  final String? resultReason;
+  final String? storyline;
+  final String? call_to_action;
+  final DateTime startedAt;
+  final DateTime? completedAt;
+
+  ChallengeSession({
+    required this.id,
+    required this.userId,
+    required this.challengeId,
+    required this.personaId,
+    required this.status,
+    this.resultReason,
+    this.storyline,
+    this.call_to_action,
+    required this.startedAt,
+    this.completedAt,
+  });
+
+  factory ChallengeSession.fromJson(Map<String, dynamic> json) {
+    return ChallengeSession(
+      id: json['id'] is int ? json['id'] as int : int.parse(json['id'].toString()),
+      userId: json['user_id'] is int ? json['user_id'] as int : int.parse(json['user_id'].toString()),
+      challengeId: json['challenge_id']?.toString() ?? '',
+      personaId: json['persona_id'] is int ? json['persona_id'] as int : int.parse(json['persona_id'].toString()),
+      status: json['status']?.toString() ?? '',
+      resultReason: json['result_reason']?.toString(),
+      storyline: json['storyline']?.toString(),
+      call_to_action: json['call_to_action']?.toString(),
+      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']) : DateTime.now(),
+      completedAt: json['completed_at'] != null ? DateTime.parse(json['completed_at']) : null,
+    );
+  }
+}
