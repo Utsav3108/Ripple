@@ -9,6 +9,7 @@ import 'create_persona_screen.dart';
 import 'create_challenge_screen.dart';
 import 'Model/model.dart';
 import 'category_challenges_screen.dart';
+import 'challenge_search_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -70,6 +71,21 @@ class _ChatListScreenState extends State<ChatListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ripple'),
+        actions: _currentBottomNavIndex == 1
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.search, color: Colors.white),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ChallengeSearchScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ]
+            : null,
       ),
       body: Consumer<ChatProvider>(
         builder: (context, provider, child) {
@@ -260,17 +276,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     CategoryItem('Entrepreneurship', ['Entrepreneurship', 'Public Speaking', 'Persuasion', 'Startup'], Icons.lightbulb, [Colors.deepOrange.shade900, Colors.black]),
   ];
 
-  List<Challenge> getTrendingChallenges(ChatProvider provider) {
-    return provider.challenges.where((c) => c.difficulty == 'intermediate' || c.difficulty == 'advance').toList();
-  }
 
-  List<Challenge> getRecommendedChallenges(ChatProvider provider) {
-    return provider.challenges.where((c) => c.difficulty == 'beginner' || c.difficulty == 'intermediate').toList();
-  }
-
-  List<Challenge> getRecentlyAddedChallenges(ChatProvider provider) {
-    return provider.challenges.reversed.toList();
-  }
 
   String getChallengeCTA(ChatProvider provider, Challenge challenge) {
     final isActive = provider.activeSessions.any((s) => s.challengeId == challenge.id);
@@ -371,14 +377,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
-  Challenge? getDailyChallenge(ChatProvider provider) {
-    if (provider.challenges.isEmpty) return null;
-    try {
-      return provider.challenges.firstWhere((c) => c.id == 'courtroom_self_defense');
-    } catch (_) {
-      return provider.challenges.first;
-    }
-  }
+
 
   Widget _buildContinuePlayingSection(BuildContext context, ChatProvider provider, Color accentColor, Color cardColor) {
     if (provider.activeSessions.isEmpty) return const SizedBox.shrink();
@@ -546,7 +545,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   Widget _buildDailyChallenge(BuildContext context, ChatProvider provider, Color accentColor, Color cardColor) {
-    final challenge = getDailyChallenge(provider);
+    final challenge = provider.dailyChallenge;
     if (challenge == null) return const SizedBox.shrink();
     
     final ctaText = getChallengeCTA(provider, challenge);
@@ -639,6 +638,143 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   Widget _buildCarousel(ChatProvider provider, List<Challenge> challenges, Color accentColor, Color cardColor, {bool isTrending = false}) {
+    if (challenges.isEmpty) return const SizedBox.shrink();
+
+    final isSingle = challenges.length == 1;
+
+    Widget buildCard(Challenge challenge, int index, {double? width}) {
+      final ctaText = getChallengeCTA(provider, challenge);
+      
+      if (!provider.challengeAttemptCounts.containsKey(challenge.id)) {
+        provider.fetchAttemptCountForChallenge(challenge.id);
+      }
+
+      return Container(
+        width: width,
+        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white10),
+          boxShadow: const [
+            BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 3)),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _onChallengeTap(context, provider, challenge),
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    if (isTrending)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              "🔥 #${index + 1} Trending",
+                              style: const TextStyle(color: Colors.redAccent, fontSize: 8, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (challenge.categories != null && challenge.categories!.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: accentColor.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          challenge.categories!.first,
+                          style: TextStyle(color: accentColor, fontSize: 8, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    Text(
+                      (challenge.difficulty ?? 'medium').toUpperCase(),
+                      style: TextStyle(
+                        color: challenge.difficulty == 'advance'
+                            ? Colors.redAccent
+                            : challenge.difficulty == 'intermediate'
+                                ? Colors.orangeAccent
+                                : accentColor,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        challenge.title,
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        challenge.subtitle ?? challenge.context?.goal ?? "Master this conversation",
+                        style: const TextStyle(color: Colors.white54, fontSize: 10, height: 1.3),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  height: 32,
+                  child: ElevatedButton(
+                    onPressed: () => _onChallengeTap(context, provider, challenge),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: ctaText == 'Resume' ? accentColor : Colors.white.withOpacity(0.06),
+                      foregroundColor: ctaText == 'Resume' ? Colors.black : Colors.white70,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(color: ctaText == 'Resume' ? Colors.transparent : Colors.white12),
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                    child: Text(
+                      ctaText,
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (isSingle) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: SizedBox(
+          height: 190,
+          width: double.infinity,
+          child: buildCard(challenges.first, 0),
+        ),
+      );
+    }
+
     return SizedBox(
       height: 190,
       child: ListView.builder(
@@ -646,128 +782,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         itemCount: challenges.length,
         itemBuilder: (context, index) {
-          final challenge = challenges[index];
-          final ctaText = getChallengeCTA(provider, challenge);
-          
-          if (!provider.challengeAttemptCounts.containsKey(challenge.id)) {
-            provider.fetchAttemptCountForChallenge(challenge.id);
-          }
-
-          return Container(
-            width: 220,
-            margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            decoration: BoxDecoration(
-              color: cardColor,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white10),
-              boxShadow: const [
-                BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 3)),
-              ],
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: () => _onChallengeTap(context, provider, challenge),
-              borderRadius: BorderRadius.circular(20),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        if (isTrending)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.redAccent.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.local_fire_department, size: 10, color: Colors.redAccent),
-                                const SizedBox(width: 2),
-                                Text(
-                                  "🔥 #${index + 1} Trending",
-                                  style: const TextStyle(color: Colors.redAccent, fontSize: 8, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          )
-                        else if (challenge.categories != null && challenge.categories!.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: accentColor.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              challenge.categories!.first,
-                              style: TextStyle(color: accentColor, fontSize: 8, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        Text(
-                          (challenge.difficulty ?? 'medium').toUpperCase(),
-                          style: TextStyle(
-                            color: challenge.difficulty == 'advance'
-                                ? Colors.redAccent
-                                : challenge.difficulty == 'intermediate'
-                                    ? Colors.orangeAccent
-                                    : accentColor,
-                            fontSize: 8,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            challenge.title,
-                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            challenge.subtitle ?? challenge.context?.goal ?? "Master this conversation",
-                            style: const TextStyle(color: Colors.white54, fontSize: 10, height: 1.3),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 32,
-                      child: ElevatedButton(
-                        onPressed: () => _onChallengeTap(context, provider, challenge),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: ctaText == 'Resume' ? accentColor : Colors.white.withOpacity(0.06),
-                          foregroundColor: ctaText == 'Resume' ? Colors.black : Colors.white70,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            side: BorderSide(color: ctaText == 'Resume' ? Colors.transparent : Colors.white12),
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
-                        child: Text(
-                          ctaText,
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
+          return buildCard(challenges[index], index, width: 220);
         },
       ),
     );
@@ -867,9 +882,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
       );
     }
 
-    final trending = getTrendingChallenges(provider);
-    final recommended = getRecommendedChallenges(provider);
-    final recentlyAdded = getRecentlyAddedChallenges(provider);
+    final trending = provider.trendingChallenges;
+    final recommended = provider.recommendedChallenges;
+    final recentlyAdded = provider.recentlyAddedChallenges;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -891,15 +906,17 @@ class _ChatListScreenState extends State<ChatListScreen> {
             ],
 
             // 2. Daily Challenge
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Text(
-                'Daily Challenge',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            if (provider.dailyChallenge != null) ...[
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Text(
+                  'Daily Challenge',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
               ),
-            ),
-            _buildDailyChallenge(context, provider, accentColor, cardColor),
-            const SizedBox(height: 16),
+              _buildDailyChallenge(context, provider, accentColor, cardColor),
+              const SizedBox(height: 16),
+            ],
 
             // 3. Trending Challenges
             if (trending.isNotEmpty) ...[

@@ -91,6 +91,7 @@ class Challenge {
   final String? imageUrl;
   final int? selectedPersonaId;
   final ChallengeContext? context;
+  final DateTime? createdAt;
 
   Challenge({
     required this.id,
@@ -104,6 +105,7 @@ class Challenge {
     this.imageUrl,
     this.selectedPersonaId,
     this.context,
+    this.createdAt,
   });
 
   factory Challenge.fromJson(Map<String, dynamic> json) {
@@ -130,6 +132,9 @@ class Challenge {
               : null),
       context: json['context'] is Map 
           ? ChallengeContext.fromJson(Map<String, dynamic>.from(json['context'] as Map)) 
+          : null,
+      createdAt: json['created_at'] != null 
+          ? DateTime.tryParse(json['created_at'].toString()) 
           : null,
     );
   }

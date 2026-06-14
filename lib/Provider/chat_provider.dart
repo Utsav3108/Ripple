@@ -13,8 +13,15 @@ class ChatProvider with ChangeNotifier {
   List<Persona> _chats = [];
   List<Message> _messages = [];
   List<Persona> _searchResults = [];
+  List<Challenge> _challengeSearchResults = [];
   List<Challenge> _challenges = [];
   List<Persona> _allPersonas = [];
+  
+  Challenge? _dailyChallenge;
+  List<Challenge> _trendingChallenges = [];
+  List<Challenge> _recommendedChallenges = [];
+  List<Challenge> _recentlyAddedChallenges = [];
+  bool _isDashboardLoading = false;
   
   String _userEmail = '';
   String _userRole = '';
@@ -44,8 +51,15 @@ class ChatProvider with ChangeNotifier {
   List<Persona> get chats => _chats;
   List<Message> get messages => _messages;
   List<Persona> get searchResults => _searchResults;
+  List<Challenge> get challengeSearchResults => _challengeSearchResults;
   List<Challenge> get challenges => _challenges;
   List<Persona> get allPersonas => _allPersonas;
+
+  Challenge? get dailyChallenge => _dailyChallenge;
+  List<Challenge> get trendingChallenges => _trendingChallenges;
+  List<Challenge> get recommendedChallenges => _recommendedChallenges;
+  List<Challenge> get recentlyAddedChallenges => _recentlyAddedChallenges;
+  bool get isDashboardLoading => _isDashboardLoading;
   
   String get userEmail => _userEmail;
   String get userRole => _userRole;
@@ -180,11 +194,54 @@ class ChatProvider with ChangeNotifier {
             .map((json) => Challenge.fromJson(json))
             .toList();
       }
+
+      await fetchChallengesDashboard();
     } catch (e) {
       _errorMessage = e.toString();
       print("Error fetching challenges: $e");
     } finally {
       _isChallengesLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchChallengesDashboard() async {
+    _isDashboardLoading = true;
+    notifyListeners();
+
+    try {
+      final request = Request(
+        url: '/challenges/dashboard',
+        method: HTTPMethod.GET,
+      );
+
+      final response = await _network.performRequest(request);
+
+      if (response.data is Map) {
+        final data = Map<String, dynamic>.from(response.data as Map);
+        _dailyChallenge = data['daily_challenge'] != null
+            ? Challenge.fromJson(Map<String, dynamic>.from(data['daily_challenge'] as Map))
+            : null;
+        _trendingChallenges = data['trending_challenges'] is List
+            ? (data['trending_challenges'] as List)
+                .map((json) => Challenge.fromJson(Map<String, dynamic>.from(json as Map)))
+                .toList()
+            : [];
+        _recommendedChallenges = data['recommended_challenges'] is List
+            ? (data['recommended_challenges'] as List)
+                .map((json) => Challenge.fromJson(Map<String, dynamic>.from(json as Map)))
+                .toList()
+            : [];
+        _recentlyAddedChallenges = data['recently_added_challenges'] is List
+            ? (data['recently_added_challenges'] as List)
+                .map((json) => Challenge.fromJson(Map<String, dynamic>.from(json as Map)))
+                .toList()
+            : [];
+      }
+    } catch (e) {
+      print("Error fetching challenges dashboard: $e");
+    } finally {
+      _isDashboardLoading = false;
       notifyListeners();
     }
   }
@@ -257,6 +314,58 @@ class ChatProvider with ChangeNotifier {
       _isSearching = false;
       notifyListeners();
     }
+  }
+
+  Future<void> searchChallenges(String query, {int limit = 20, int offset = 0, bool loadMore = false}) async {
+    if (query.isEmpty) {
+      _challengeSearchResults = [];
+      notifyListeners();
+      return;
+    }
+
+    if (!loadMore) {
+      _isSearching = true;
+      _challengeSearchResults = [];
+      notifyListeners();
+    }
+
+    try {
+      final request = Request(
+        url: '/challenges',
+        method: HTTPMethod.GET,
+        body: {
+          'q': query,
+          'limit': limit,
+          'offset': offset,
+        },
+      );
+
+      final response = await _network.performRequest(request);
+
+      if (response.data is List) {
+        final newResults = (response.data as List)
+            .map((json) => Challenge.fromJson(json))
+            .toList();
+        if (loadMore) {
+          _challengeSearchResults.addAll(newResults);
+        } else {
+          _challengeSearchResults = newResults;
+        }
+      }
+    } catch (e) {
+      print("Error searching challenges: $e");
+      if (!loadMore) {
+        _challengeSearchResults = [];
+      }
+    } finally {
+      _isSearching = false;
+      notifyListeners();
+    }
+  }
+
+  void clearChallengeSearchResults() {
+    _challengeSearchResults = [];
+    notifyListeners();
   }
 
   Future<void> fetchMessages(int receiverId) async {
