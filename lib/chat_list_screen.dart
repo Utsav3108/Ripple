@@ -10,6 +10,7 @@ import 'create_challenge_screen.dart';
 import 'Model/model.dart';
 import 'category_challenges_screen.dart';
 import 'challenge_search_screen.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -70,7 +71,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ripple'),
+        title: Text(
+          'Ripple',
+          style: GoogleFonts.pacifico(
+            color: accentColor,
+            fontSize: 30,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         actions: _currentBottomNavIndex == 1
             ? [
                 IconButton(
