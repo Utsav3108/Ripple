@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -21,7 +22,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _isSettingUpChallenge = false;
@@ -39,11 +40,18 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _showPersonaSelectionOverlay = false;
   Challenge? _selectedNextChallenge;
 
+  // Timer state variables
+  Timer? _timer;
+  int _remainingSeconds = 0;
+  bool _hasTimer = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _activeChallenge = widget.challenge;
     _activePersona = widget.persona;
+    _chatProvider = context.read<ChatProvider>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeChat();
     });
@@ -57,14 +65,93 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopTimer();
+    if (_activeChallenge != null && widget.attemptSessionId == null) {
+      _chatProvider?.pauseChallengeSession();
+    }
     _messageController.dispose();
     _scrollController.dispose();
     // Safely clear challenge session and socket callbacks on screen disposal
     if (_chatProvider != null) {
-      _chatProvider!.clearChallengeSession();
+      final provider = _chatProvider!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        provider.clearChallengeSession();
+      });
       _chatProvider!.onChallengeCompletedEvent = null;
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_activeChallenge == null || widget.attemptSessionId != null) return;
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _stopTimer();
+      _chatProvider?.pauseChallengeSession();
+    } else if (state == AppLifecycleState.resumed) {
+      _resumeSessionAndTimer();
+    }
+  }
+
+  Future<void> _resumeSessionAndTimer() async {
+    if (_chatProvider == null || _activeChallenge == null) return;
+    try {
+      await _chatProvider!.setupChallenge(
+        challengeId: _activeChallenge!.id,
+        personaId: _activePersona.id,
+        attemptSessionId: widget.attemptSessionId,
+      );
+      _startTimer();
+    } catch (e) {
+      print("Error resuming timer: $e");
+    }
+  }
+
+  void _startTimer() {
+    _stopTimer();
+    final durationMinutes = _chatProvider?.currentChallengeDuration ?? 0;
+    if (durationMinutes <= 0) return;
+
+    final elapsedSeconds = _chatProvider?.currentChallengeElapsedSeconds ?? 0;
+    _remainingSeconds = (durationMinutes * 60) - elapsedSeconds;
+    
+    if (_remainingSeconds <= 0) {
+      _handleTimeout();
+      return;
+    }
+
+    _hasTimer = true;
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() {
+        if (_remainingSeconds > 0) {
+          _remainingSeconds--;
+        } else {
+          _stopTimer();
+          _handleTimeout();
+        }
+      });
+    });
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
+    _hasTimer = false;
+  }
+
+  void _handleTimeout() {
+    _handleCompletion('lost_timeout');
+  }
+
+  String get _formattedRemainingTime {
+    if (_remainingSeconds <= 0) return '00:00:00';
+    final duration = Duration(seconds: _remainingSeconds);
+    final hours = duration.inHours.toString().padLeft(2, '0');
+    final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$hours:$minutes:$seconds';
   }
 
   Future<void> _initializeChat() async {
@@ -114,6 +201,10 @@ class _ChatScreenState extends State<ChatScreen> {
           personaId: _activePersona.id,
           attemptSessionId: widget.attemptSessionId,
         );
+
+        if (widget.attemptSessionId == null) {
+          _startTimer();
+        }
         
         // Retrieve storyline and trigger narration animation
         final intro = provider.currentChallengeIntro;
@@ -213,86 +304,12 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _showCompletionDialog() {
-    final theme = Theme.of(context);
-    final accentColor = theme.colorScheme.primary;
-
-    final statuses = [
-      {'value': 'won', 'label': 'Challenge Won'},
-      {'value': 'won_objective_completed', 'label': 'Objective Completed'},
-      {'value': 'lost_timeout', 'label': 'Failed: Timeout'},
-      {'value': 'lost_rejected', 'label': 'Failed: Persona Rejected'},
-      {'value': 'lost_blocked', 'label': 'Failed: Persona Blocked'},
-      {'value': 'lost_rule_violation', 'label': 'Failed: Rule Violation'},
-      {'value': 'abandoned', 'label': 'Abandon Challenge'},
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: theme.colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Simulate Challenge Completion',
-                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Choose a status below to complete this session and see the premium result overlay.',
-                style: TextStyle(color: Colors.white54, fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: statuses.length,
-                  itemBuilder: (context, index) {
-                    final status = statuses[index];
-                    final isLose = status['value']!.startsWith('lost');
-                    final isWin = status['value']!.startsWith('won');
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                      title: Text(
-                        status['label']!,
-                        style: TextStyle(
-                          color: isWin 
-                              ? accentColor 
-                              : isLose 
-                                  ? theme.colorScheme.error 
-                                  : Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white30),
-                      onTap: () async {
-                        Navigator.pop(context); // Close bottom sheet
-                        _handleCompletion(status['value']!);
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _handleCompletion(String status) async {
     final chatProvider = context.read<ChatProvider>();
     
     // Determine custom reason for simulation
     String reason = 'Goal achieved successfully!';
-    if (status == 'lost_timeout') reason = 'You exceeded the time limit to persuade the president.';
+    if (status == 'lost_timeout') reason = 'You ran out of time before completing the challenge.';
     if (status == 'lost_rejected') reason = 'The president flatly rejected your contract terms.';
     if (status == 'lost_blocked') reason = 'The president was offended by your messages and walked out.';
     if (status == 'lost_rule_violation') reason = 'You violated diplomatic protocols during negotiations.';
@@ -312,6 +329,10 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _showChallengeCompletedOverlay(String status, String reason, int attemptCount) {
+    _stopTimer();
+    // Hide keyboard when challenge completes
+    FocusManager.instance.primaryFocus?.unfocus();
+
     final isWin = status.startsWith('won') || status == 'won_objective_completed';
     final theme = Theme.of(context);
     
@@ -606,8 +627,25 @@ class _ChatScreenState extends State<ChatScreen> {
     final isChallengeMode = _activeChallenge != null;
     final provider = context.watch<ChatProvider>();
 
-    return Scaffold(
-      appBar: AppBar(
+    return WillPopScope(
+      onWillPop: () async {
+        _stopTimer();
+        if (_activeChallenge != null && widget.attemptSessionId == null) {
+          // Show a quick loading dialog so the user knows it's saving progress
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => const Center(child: CircularProgressIndicator()),
+          );
+          await _chatProvider?.pauseChallengeSession();
+          if (context.mounted) {
+            Navigator.pop(context); // Pop dialog
+          }
+        }
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
         title: Row(
           children: [
             CircleAvatar(
@@ -654,12 +692,22 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
-          if (isChallengeMode && !_isSettingUpChallenge && widget.attemptSessionId == null)
-            IconButton(
-              icon: Icon(Icons.flag_outlined, color: accentColor),
-              tooltip: 'Complete/Simulate Challenge',
-              onPressed: _showCompletionDialog,
+          if (isChallengeMode && !_isSettingUpChallenge && widget.attemptSessionId == null && _hasTimer)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: Text(
+                  _formattedRemainingTime,
+                  style: TextStyle(
+                    color: _remainingSeconds < 60 ? Colors.redAccent : Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Courier',
+                  ),
+                ),
+              ),
             ),
+
         ],
       ),
       body: Stack(
@@ -803,8 +851,9 @@ class _ChatScreenState extends State<ChatScreen> {
             _buildPersonaSelectionOverlay(context, provider),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildReadOnlyResultBanner(ThemeData theme, String? status) {
     final cleanStatus = status?.toLowerCase() ?? 'abandoned';
@@ -957,6 +1006,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       setState(() {
                         _showChallengeSelectionOverlay = false;
                       });
+                      Navigator.pop(context); // Redirect to challenge dashboard
                     },
                   ),
                 ],

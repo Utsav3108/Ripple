@@ -5,6 +5,7 @@ import '../Network/network_manager.dart';
 import '../Network/socket_manager.dart';
 import '../Model/model.dart';
 import '../core/config/app_config.dart';
+import '../main.dart';
 class ChatProvider with ChangeNotifier {
   final Network _network = Network();
   final SocketManager _socketManager = SocketManager();
@@ -91,6 +92,9 @@ class ChatProvider with ChangeNotifier {
   int? _currentChallengeDuration;
   int? get currentChallengeDuration => _currentChallengeDuration;
 
+  int _currentChallengeElapsedSeconds = 0;
+  int get currentChallengeElapsedSeconds => _currentChallengeElapsedSeconds;
+
   int? _currentUserId;
   int? get currentUserId => _currentUserId;
   bool get isAuthenticated => _currentUserId != null;
@@ -101,6 +105,9 @@ class ChatProvider with ChangeNotifier {
   Function(Map<String, dynamic>)? onChallengeCompletedEvent;
 
   ChatProvider() {
+    _network.onUnauthorised = () {
+      logout();
+    };
     _initSocket();
     _initGoogleSignIn();
     tryAutoLogin();
@@ -656,6 +663,8 @@ class ChatProvider with ChangeNotifier {
     _googleSignIn.disconnect().catchError((error) {
       print("Error disconnecting Google Sign In: $error");
     });
+    // Pop all screens to root (LoginScreen/ChatListScreen)
+    navigatorKey.currentState?.popUntil((route) => route.isFirst);
     notifyListeners();
   }
 
@@ -686,6 +695,7 @@ class ChatProvider with ChangeNotifier {
     _currentChallengeIntro = null;
     _currentChallengeStatus = null;
     _currentChallengeDuration = null;
+    _currentChallengeElapsedSeconds = 0;
     _messages = [];
     notifyListeners();
 
@@ -718,6 +728,11 @@ class ChatProvider with ChangeNotifier {
         _currentChallengeDuration = rawDuration is int 
             ? rawDuration 
             : (rawDuration != null ? int.tryParse(rawDuration.toString()) : null);
+
+        final rawElapsed = data['elapsed_seconds'];
+        _currentChallengeElapsedSeconds = rawElapsed is int 
+            ? rawElapsed 
+            : (rawElapsed != null ? int.tryParse(rawElapsed.toString()) ?? 0 : 0);
 
         // Parse conversation history from setup challenge directly
         if (data['conversation_history'] is List) {
@@ -899,6 +914,19 @@ class ChatProvider with ChangeNotifier {
     } finally {
       _isProfileLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> pauseChallengeSession() async {
+    if (_currentChallengeSessionId == null) return;
+    try {
+      final request = Request(
+        url: '/challenge-sessions/$_currentChallengeSessionId/pause',
+        method: HTTPMethod.POST,
+      );
+      await _network.performRequest(request);
+    } catch (e) {
+      print("Error pausing challenge session: $e");
     }
   }
 

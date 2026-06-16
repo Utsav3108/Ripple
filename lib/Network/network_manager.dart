@@ -20,6 +20,7 @@ class Network {
 
   final Dio dio = Dio();
   String? _token;
+  void Function()? onUnauthorised;
 
   Network._internal();
 
@@ -66,9 +67,13 @@ class Network {
           } else if (e.response?.statusMessage != null) {
             errorMsg = e.response!.statusMessage!;
           }
+          final isUnauthorised = e.response?.statusCode == 401 || e.response?.statusCode == 403;
+          if (isUnauthorised && onUnauthorised != null) {
+            onUnauthorised!();
+          }
           throw APIExceptions(
             message: errorMsg,
-            type: APIExceptionType.badResponse,
+            type: isUnauthorised ? APIExceptionType.unAuthorised : APIExceptionType.badResponse,
             statusCode: e.response?.statusCode,
           );
         case DioExceptionType.connectionTimeout:
@@ -90,15 +95,21 @@ class Network {
     if (res.statusCode == 200) {
       return true;
     } else if (res.data is Map<String, dynamic>) {
-      if (res.data["status"] == 403) {
+      final status = res.data["status"];
+      if (status == 403 || status == 401) {
+        if (onUnauthorised != null) {
+          onUnauthorised!();
+        }
         throw APIExceptions(
-          message: res.data["message"],
-          statusCode: res.data["status"] as int,
+          message: res.data["message"] ?? "Unauthorised",
+          type: APIExceptionType.unAuthorised,
+          statusCode: status as int,
         );
-      } else if (res.data["status"] == 500) {
+      } else if (status == 500) {
         throw APIExceptions(
           message: "Server is under maintenance..",
-          statusCode: res.data["status"] as int,
+          type: APIExceptionType.ServerUnderMaintenance,
+          statusCode: status as int,
         );
       }
     }
