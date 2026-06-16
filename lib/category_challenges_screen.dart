@@ -212,17 +212,43 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
                               end: Alignment.bottomRight,
                             ),
                           ),
-                          alignment: Alignment.centerLeft,
                           padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Text(
-                            challenge.title,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  challenge.title,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ChallengeStatsScreen(challenge: challenge),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white12,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.white24),
+                                  ),
+                                  child: Icon(Icons.bar_chart, size: 14, color: accentColor),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         Padding(

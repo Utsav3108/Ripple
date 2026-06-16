@@ -44,6 +44,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Timer? _timer;
   int _remainingSeconds = 0;
   bool _hasTimer = false;
+  int _lastMessagesLength = 0;
 
   @override
   void initState() {
@@ -411,11 +412,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       // Play Again Button
                       ElevatedButton(
                         onPressed: () {
-                          Navigator.pop(dialogContext); // Close dialog
-                          setState(() {
-                            _skipNarrationForReplay = true;
-                          });
-                          _initializeChat();
+                          Navigator.pop(dialogContext, 'retry'); // Close dialog with retry result
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: titleColor,
@@ -430,14 +427,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       // Next Challenge Button
                       OutlinedButton(
                         onPressed: () {
-                          Navigator.pop(dialogContext); // Close dialog
-                          
-                          setState(() {
-                            _showChallengeSelectionOverlay = true;
-                          });
-                          final chatProvider = context.read<ChatProvider>();
-                          chatProvider.fetchChallenges();
-                          chatProvider.fetchAllPersonas();
+                          Navigator.pop(dialogContext, 'next'); // Close dialog with next result
                         },
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.white,
@@ -451,11 +441,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       // Try Again Button
                       ElevatedButton(
                         onPressed: () {
-                          Navigator.pop(dialogContext); // Close dialog
-                          setState(() {
-                            _skipNarrationForReplay = true;
-                          });
-                          _initializeChat();
+                          Navigator.pop(dialogContext, 'retry'); // Close dialog with retry result
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: titleColor,
@@ -470,8 +456,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       // Exit Challenge Button
                       OutlinedButton(
                         onPressed: () {
-                          Navigator.pop(dialogContext); // Close dialog
-                          Navigator.pop(context); // Pop chat screen
+                          Navigator.pop(dialogContext, 'exit'); // Close dialog with exit result
                         },
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.white,
@@ -489,7 +474,24 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           ),
         );
       },
-    );
+    ).then((result) {
+      if (!mounted) return;
+      if (result == 'exit') {
+        Navigator.pop(context); // Pop chat screen
+      } else if (result == 'retry') {
+        setState(() {
+          _skipNarrationForReplay = true;
+        });
+        _initializeChat();
+      } else if (result == 'next') {
+        setState(() {
+          _showChallengeSelectionOverlay = true;
+        });
+        final chatProvider = _chatProvider!;
+        chatProvider.fetchChallenges();
+        chatProvider.fetchAllPersonas();
+      }
+    });
   }
 
   Widget _buildStorylineCard(ThemeData theme, Map<String, dynamic> intro) {
@@ -733,7 +735,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             return const Center(child: CircularProgressIndicator());
                           }
 
-                          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+                          final messagesCount = provider.messages.length;
+                          if (messagesCount != _lastMessagesLength) {
+                            _lastMessagesLength = messagesCount;
+                            WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+                          }
 
                           final hasIntro = provider.currentChallengeIntro != null;
                           final itemCount = provider.messages.length + (hasIntro ? 1 : 0);
