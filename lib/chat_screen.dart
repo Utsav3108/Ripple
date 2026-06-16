@@ -409,10 +409,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     const SizedBox(height: 32),
                     
                     if (isWin) ...[
-                      // Play Again Button
+                      // Exit Challenge Button
                       ElevatedButton(
                         onPressed: () {
-                          Navigator.pop(dialogContext, 'retry'); // Close dialog with retry result
+                          Navigator.pop(dialogContext, 'exit'); // Close dialog with exit result
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: titleColor,
@@ -421,7 +421,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                           elevation: 0,
                         ),
-                        child: const Text('Play Again', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        child: const Text('Exit Challenge', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       ),
                       const SizedBox(height: 12),
                       // Next Challenge Button

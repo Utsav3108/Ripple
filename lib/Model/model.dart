@@ -224,6 +224,7 @@ class ProfileAttemptLogItem {
   final bool won;
   final DateTime createdAt;
   final int challengeSessionId;
+  final int personaId;
 
   ProfileAttemptLogItem({
     required this.challengeId,
@@ -232,6 +233,7 @@ class ProfileAttemptLogItem {
     required this.won,
     required this.createdAt,
     required this.challengeSessionId,
+    required this.personaId,
   });
 
   factory ProfileAttemptLogItem.fromJson(Map<String, dynamic> json) {
@@ -246,6 +248,9 @@ class ProfileAttemptLogItem {
       challengeSessionId: json['challenge_session_id'] is int 
           ? json['challenge_session_id'] as int 
           : (int.tryParse(json['challenge_session_id']?.toString() ?? '') ?? 0),
+      personaId: json['persona_id'] is int 
+          ? json['persona_id'] as int 
+          : (int.tryParse(json['persona_id']?.toString() ?? '') ?? 0),
     );
   }
 }

@@ -1216,59 +1216,97 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       final badgeColor = item.won ? accentColor : Colors.redAccent;
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12.0),
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: cardColor,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white10),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: badgeColor.withOpacity(0.08),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  item.won ? Icons.emoji_events : Icons.cancel,
-                                  color: badgeColor,
-                                  size: 20,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.challengeTitle,
-                                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      "Opponent: ${item.personaName} • $dateString",
-                                      style: const TextStyle(color: Colors.white54, fontSize: 12),
-                                    ),
-                                  ],
+                        child: InkWell(
+                          onTap: () {
+                            // Look up challenge from provider or construct fallback
+                            Challenge? challenge;
+                            try {
+                              challenge = provider.challenges.firstWhere((c) => c.id == item.challengeId);
+                            } catch (_) {
+                              challenge = null;
+                            }
+                            if (challenge == null) {
+                              challenge = Challenge(
+                                id: item.challengeId,
+                                title: item.challengeTitle,
+                                difficulty: 'medium',
+                              );
+                            }
+
+                            // Look up persona from provider or construct fallback
+                            final persona = provider.getPersonaById(item.personaId);
+                            final resolvedPersona = persona ?? Persona(
+                              id: item.personaId,
+                              name: item.personaName,
+                              desc: 'Diplomatic strategic candidate',
+                            );
+
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChatScreen(
+                                  persona: resolvedPersona,
+                                  challenge: challenge,
+                                  attemptSessionId: item.challengeSessionId,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: badgeColor.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(12),
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: cardColor,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.white10),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: badgeColor.withOpacity(0.08),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    item.won ? Icons.emoji_events : Icons.cancel,
+                                    color: badgeColor,
+                                    size: 20,
+                                  ),
                                 ),
-                                child: Text(
-                                  item.won ? 'WON' : 'FAILED',
-                                  style: TextStyle(color: badgeColor, fontSize: 10, fontWeight: FontWeight.bold),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item.challengeTitle,
+                                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        "Opponent: ${item.personaName} • $dateString",
+                                        style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: badgeColor.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    item.won ? 'WON' : 'FAILED',
+                                    style: TextStyle(color: badgeColor, fontSize: 10, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );
