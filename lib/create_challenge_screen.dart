@@ -375,7 +375,7 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
                             items: const [
                               DropdownMenuItem(value: 'beginner', child: Text('Beginner')),
                               DropdownMenuItem(value: 'intermediate', child: Text('Intermediate')),
-                              DropdownMenuItem(value: 'advance', child: Text('Advanced')),
+                              DropdownMenuItem(value: 'advance', child: Text('Advance')),
                             ],
                             onChanged: (value) {
                               if (value != null) {
