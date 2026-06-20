@@ -150,7 +150,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
         builder: (context, provider, child) {
           final matchedChallenges = provider.challenges.where((c) {
             if (c.categories == null) return false;
-            return c.categories!.any((cat) => widget.keywords.contains(cat));
+            return c.categories!.any((cat) => widget.keywords.contains(cat) || cat == widget.categoryName);
           }).toList();
 
           if (provider.isChallengesLoading && matchedChallenges.isEmpty) {

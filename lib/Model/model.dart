@@ -295,3 +295,33 @@ class ChallengeSession {
     );
   }
 }
+
+class Category {
+  final int id;
+  final String name;
+  final List<String>? keywords;
+  final String? icon;
+  final List<String>? gradientColors;
+
+  Category({
+    required this.id,
+    required this.name,
+    this.keywords,
+    this.icon,
+    this.gradientColors,
+  });
+
+  factory Category.fromJson(Map<String, dynamic> json) {
+    return Category(
+      id: json['id'] is int ? json['id'] as int : int.parse(json['id'].toString()),
+      name: json['name']?.toString() ?? '',
+      keywords: json['keywords'] != null
+          ? List<String>.from((json['keywords'] as List).map((e) => e.toString()))
+          : null,
+      icon: json['icon']?.toString(),
+      gradientColors: json['gradient_colors'] != null
+          ? List<String>.from((json['gradient_colors'] as List).map((e) => e.toString()))
+          : null,
+    );
+  }
+}

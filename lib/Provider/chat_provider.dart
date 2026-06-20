@@ -917,6 +917,38 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
+  List<Category> _categories = [];
+  List<Category> get categories => _categories;
+  bool _isCategoriesLoading = false;
+  bool get isCategoriesLoading => _isCategoriesLoading;
+
+  Future<void> fetchCategories() async {
+    _isCategoriesLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final request = Request(
+        url: '/categories',
+        method: HTTPMethod.GET,
+      );
+
+      final response = await _network.performRequest(request);
+
+      if (response.data is List) {
+        _categories = (response.data as List)
+            .map((json) => Category.fromJson(json))
+            .toList();
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      print("Error fetching categories: $e");
+    } finally {
+      _isCategoriesLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> pauseChallengeSession() async {
     if (_currentChallengeSessionId == null) return;
     try {

@@ -42,6 +42,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       final provider = context.read<ChatProvider>();
       provider.fetchChattedPersonas();
       provider.fetchChallenges();
+      provider.fetchCategories();
       provider.fetchActiveSessions();
       provider.fetchAllPersonas();
       provider.fetchUserProfile();
@@ -57,6 +58,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       provider.fetchChattedPersonas();
     } else if (index == 1) {
       provider.fetchChallenges();
+      provider.fetchCategories();
       provider.fetchActiveSessions();
     } else if (index == 2) {
       provider.fetchUserProfile();
@@ -273,16 +275,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
-  final List<CategoryItem> _categoriesList = [
-    CategoryItem('Business & Career', ['Finance', 'Business Strategy', 'Startup', 'Business'], Icons.business_center, [Colors.blue.shade900, Colors.black]),
-    CategoryItem('Social & Rapport', ['Social Skills', 'Confidence', 'Emotional Intelligence', 'Conflict Resolution', 'Empathy', 'Social'], Icons.people, [Colors.purple.shade900, Colors.black]),
-    CategoryItem('Dating', ['Dating'], Icons.favorite, [Colors.red.shade900, Colors.black]),
-    CategoryItem('Leadership', ['Leadership'], Icons.star, [Colors.amber.shade900, Colors.black]),
-    CategoryItem('Negotiation', ['Negotiation'], Icons.handshake, [Colors.teal.shade900, Colors.black]),
-    CategoryItem('Politics', ['Politics', 'Science'], Icons.gavel, [Colors.indigo.shade900, Colors.black]),
-    CategoryItem('Courtroom', ['Courtroom Drama', 'Courtroom', 'Critical Thinking'], Icons.balance, [Colors.amber.shade700, Colors.black87]),
-    CategoryItem('Entrepreneurship', ['Entrepreneurship', 'Public Speaking', 'Persuasion', 'Startup'], Icons.lightbulb, [Colors.deepOrange.shade900, Colors.black]),
-  ];
+
 
 
 
@@ -811,7 +804,45 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
-  Widget _buildCategoryGrid(Color cardColor, Color accentColor) {
+  IconData _getIconData(String? iconName) {
+    switch (iconName) {
+      case 'business_center': return Icons.business_center;
+      case 'people': return Icons.people;
+      case 'favorite': return Icons.favorite;
+      case 'star': return Icons.star;
+      case 'handshake': return Icons.handshake;
+      case 'gavel': return Icons.gavel;
+      case 'balance': return Icons.balance;
+      case 'lightbulb': return Icons.lightbulb;
+      default: return Icons.category;
+    }
+  }
+
+  List<Color> _getGradientColors(List<String>? colors) {
+    if (colors == null || colors.isEmpty) return [Colors.blue.shade900, Colors.black];
+    return colors.map((c) {
+      if (c.startsWith('#')) {
+        try {
+          return Color(int.parse(c.substring(1).padLeft(8, 'FF'), radix: 16));
+        } catch (e) {
+          return Colors.blue.shade900;
+        }
+      }
+      return Colors.blue.shade900;
+    }).toList();
+  }
+
+  Widget _buildCategoryGrid(ChatProvider provider, Color cardColor, Color accentColor) {
+    final categories = provider.categories;
+    if (categories.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(24.0),
+        child: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -822,14 +853,18 @@ class _ChatListScreenState extends State<ChatListScreen> {
         mainAxisSpacing: 12,
         childAspectRatio: 1.6,
       ),
-      itemCount: _categoriesList.length,
+      itemCount: categories.length,
       itemBuilder: (context, index) {
-        final item = _categoriesList[index];
+        final cat = categories[index];
+        final itemIcon = _getIconData(cat.icon);
+        final itemGradient = _getGradientColors(cat.gradientColors);
+        final itemKeywords = cat.keywords ?? [cat.name];
+
         return Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             gradient: LinearGradient(
-              colors: item.gradientColors,
+              colors: itemGradient,
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -847,8 +882,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (context) => CategoryChallengesScreen(
-                      categoryName: item.name,
-                      keywords: item.keywords,
+                      categoryName: cat.name,
+                      keywords: itemKeywords,
                     ),
                   ),
                 );
@@ -859,9 +894,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(item.icon, color: accentColor, size: 24),
+                    Icon(itemIcon, color: accentColor, size: 24),
                     Text(
-                      item.name,
+                      cat.name,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 13,
@@ -988,7 +1023,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
-            _buildCategoryGrid(cardColor, accentColor),
+            _buildCategoryGrid(provider, cardColor, accentColor),
             const SizedBox(height: 32),
           ],
         ),

@@ -38,6 +38,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _skipNarrationForReplay = false;
   bool _showChallengeSelectionOverlay = false;
   bool _showPersonaSelectionOverlay = false;
+  bool _isChallengeCompletedOverlayShown = false;
   Challenge? _selectedNextChallenge;
 
   // Timer state variables
@@ -157,6 +158,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Future<void> _initializeChat() async {
     if (!mounted) return;
+
+    _isChallengeCompletedOverlayShown = false;
 
     final isHistoryMode = widget.attemptSessionId != null;
     print("DEBUG: ChatScreen Initializing...");
@@ -330,6 +333,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   void _showChallengeCompletedOverlay(String status, String reason, int attemptCount) {
+    if (_isChallengeCompletedOverlayShown) return;
+    _isChallengeCompletedOverlayShown = true;
+
     _stopTimer();
     // Hide keyboard when challenge completes
     FocusManager.instance.primaryFocus?.unfocus();
@@ -475,6 +481,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         );
       },
     ).then((result) {
+      _isChallengeCompletedOverlayShown = false;
       if (!mounted) return;
       if (result == 'exit') {
         Navigator.pop(context); // Pop chat screen
