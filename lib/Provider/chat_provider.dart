@@ -6,7 +6,9 @@ import '../Network/socket_manager.dart';
 import '../Model/model.dart';
 import '../core/config/app_config.dart';
 import '../main.dart';
-class ChatProvider with ChangeNotifier {
+import '../Services/analytics_manager.dart';
+
+class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
   final Network _network = Network();
   final SocketManager _socketManager = SocketManager();
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
@@ -111,6 +113,8 @@ class ChatProvider with ChangeNotifier {
     _initSocket();
     _initGoogleSignIn();
     tryAutoLogin();
+    WidgetsBinding.instance.addObserver(this);
+    AnalyticsManager().init();
   }
 
   void _initGoogleSignIn() {
@@ -291,48 +295,58 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
-  Future<void> searchPersonas(String query) async {
-    if (query.isEmpty) {
-      _searchResults = [];
+  Future<void> searchPersonas(String query, {int limit = 10, int offset = 0, bool loadMore = false}) async {
+    if (!loadMore) {
+      _isSearching = true;
+      if (query.isEmpty) {
+        _searchResults = [];
+      }
       notifyListeners();
-      return;
     }
 
-    _isSearching = true;
-    notifyListeners();
-
     try {
+      final url = query.isEmpty 
+          ? '/all-persona' 
+          : '/search-personas/$query';
+
       final request = Request(
-        url: '/search-personas/$query',
+        url: url,
         method: HTTPMethod.GET,
+        body: {
+          'limit': limit,
+          'offset': offset,
+        },
       );
 
       final response = await _network.performRequest(request);
 
       if (response.data is List) {
-        _searchResults = (response.data as List)
+        final newResults = (response.data as List)
             .map((json) => Persona.fromJson(json))
             .toList();
+        if (loadMore) {
+          _searchResults.addAll(newResults);
+        } else {
+          _searchResults = newResults;
+        }
       }
     } catch (e) {
       print("Error searching personas: $e");
-      _searchResults = [];
+      if (!loadMore) {
+        _searchResults = [];
+      }
     } finally {
       _isSearching = false;
       notifyListeners();
     }
   }
 
-  Future<void> searchChallenges(String query, {int limit = 20, int offset = 0, bool loadMore = false}) async {
-    if (query.isEmpty) {
-      _challengeSearchResults = [];
-      notifyListeners();
-      return;
-    }
-
+  Future<void> searchChallenges(String query, {int limit = 10, int offset = 0, bool loadMore = false}) async {
     if (!loadMore) {
       _isSearching = true;
-      _challengeSearchResults = [];
+      if (query.isEmpty) {
+        _challengeSearchResults = [];
+      }
       notifyListeners();
     }
 
@@ -341,7 +355,7 @@ class ChatProvider with ChangeNotifier {
         url: '/challenges',
         method: HTTPMethod.GET,
         body: {
-          'q': query,
+          if (query.isNotEmpty) 'q': query,
           'limit': limit,
           'offset': offset,
         },
@@ -377,6 +391,17 @@ class ChatProvider with ChangeNotifier {
 
   Future<void> fetchMessages(int receiverId) async {
     _activePersonaId = receiverId;
+    
+    // Track play_persona event
+    String personaName = 'Unknown Persona';
+    try {
+      final p = getPersonaById(receiverId);
+      if (p != null) {
+        personaName = p.name;
+      }
+    } catch (_) {}
+    AnalyticsManager().trackPlayPersona(receiverId, personaName);
+
     _socketManager.emitJoin(receiverId); // Join persona's socket room
     _isMessagesLoading = true;
     _messages = [];
@@ -700,6 +725,20 @@ class ChatProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      if (attemptSessionId == null) {
+        String challengeTitle = 'Unknown Challenge';
+        try {
+          final ch = _challenges.firstWhere((c) => c.id == challengeId);
+          challengeTitle = ch.title;
+        } catch (_) {
+          try {
+            final ch = _challengeSearchResults.firstWhere((c) => c.id == challengeId);
+            challengeTitle = ch.title;
+          } catch (_) {}
+        }
+        AnalyticsManager().trackPlayChallenge(challengeId, challengeTitle);
+      }
+
       final request = Request(
         url: '/setup_challenge',
         method: HTTPMethod.POST,
@@ -963,7 +1002,17 @@ class ChatProvider with ChangeNotifier {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      AnalyticsManager().endSession();
+    } else if (state == AppLifecycleState.resumed) {
+      AnalyticsManager().startSession();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _socketManager.disconnect();
     super.dispose();
   }

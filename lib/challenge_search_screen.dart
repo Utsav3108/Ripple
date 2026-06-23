@@ -17,7 +17,7 @@ class _ChallengeSearchScreenState extends State<ChallengeSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   String _query = '';
-  final int _pageSize = 20;
+  final int _pageSize = 10;
   bool _isLoadMoreLoading = false;
   bool _hasMore = true;
 
@@ -27,9 +27,9 @@ class _ChallengeSearchScreenState extends State<ChallengeSearchScreen> {
     _searchController.addListener(_onSearchChanged);
     _scrollController.addListener(_onScroll);
     
-    // Clear search results initially
+    // Fetch initial challenges when screen is loaded
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChatProvider>().clearChallengeSearchResults();
+      context.read<ChatProvider>().searchChallenges('', limit: _pageSize, offset: 0);
     });
   }
 
@@ -58,7 +58,7 @@ class _ChallengeSearchScreenState extends State<ChallengeSearchScreen> {
   }
 
   Future<void> _loadMore() async {
-    if (_isLoadMoreLoading || !_hasMore || _query.isEmpty) return;
+    if (_isLoadMoreLoading || !_hasMore) return;
     
     final provider = context.read<ChatProvider>();
     final currentOffset = provider.challengeSearchResults.length;
@@ -246,23 +246,9 @@ class _ChallengeSearchScreenState extends State<ChallengeSearchScreen> {
 
               // Search results list
               Expanded(
-                child: _query.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.search, size: 64, color: accentColor.withOpacity(0.6)),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Type to search challenges...',
-                              style: TextStyle(color: Colors.white54, fontSize: 16),
-                            ),
-                          ],
-                        ),
-                      )
-                    : provider.isSearching && results.isEmpty
-                        ? Center(child: CircularProgressIndicator(color: accentColor))
-                        : results.isEmpty
+                child: provider.isSearching && results.isEmpty
+                    ? Center(child: CircularProgressIndicator(color: accentColor))
+                    : results.isEmpty
                             ? const Center(
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -332,16 +318,34 @@ class _ChallengeSearchScreenState extends State<ChallengeSearchScreen> {
                                               ),
                                             ),
                                             alignment: Alignment.centerLeft,
-                                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                                            child: Text(
-                                              challenge.title,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 17,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
+                                            padding: const EdgeInsets.only(left: 20, right: 8),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    challenge.title,
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 17,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                    maxLines: 2,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(Icons.bar_chart, color: Colors.white70),
+                                                  onPressed: () {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (context) => ChallengeStatsScreen(challenge: challenge),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ],
                                             ),
                                           ),
                                           Padding(

@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'Model/model.dart';
 import 'Model/narration_parser.dart';
 import 'Provider/chat_provider.dart';
+import 'Services/analytics_manager.dart';
 
 class ChatScreen extends StatefulWidget {
   final Persona persona;
@@ -40,6 +41,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _showPersonaSelectionOverlay = false;
   bool _isChallengeCompletedOverlayShown = false;
   Challenge? _selectedNextChallenge;
+  bool _userSentMessageInSession = false;
 
   // Timer state variables
   Timer? _timer;
@@ -69,6 +71,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopTimer();
+
+    // Track midway exits
+    if (widget.attemptSessionId == null) {
+      if (_activeChallenge != null) {
+        if (!_isChallengeCompletedOverlayShown) {
+          AnalyticsManager().trackLeaveChallengeMidway(_activeChallenge!.id, _activeChallenge!.title);
+        }
+      } else {
+        if (!_userSentMessageInSession) {
+          AnalyticsManager().trackLeaveChatMidway(_activePersona.id, _activePersona.name);
+        }
+      }
+    }
+
     if (_activeChallenge != null && widget.attemptSessionId == null) {
       _chatProvider?.pauseChallengeSession();
     }
@@ -335,6 +351,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void _showChallengeCompletedOverlay(String status, String reason, int attemptCount) {
     if (_isChallengeCompletedOverlayShown) return;
     _isChallengeCompletedOverlayShown = true;
+
+    // Track challenge completion
+    if (_activeChallenge != null && widget.attemptSessionId == null) {
+      final isWin = status.startsWith('won') || status == 'won_objective_completed';
+      AnalyticsManager().trackCompleteChallenge(_activeChallenge!.id, _activeChallenge!.title, isWin);
+    }
 
     _stopTimer();
     // Hide keyboard when challenge completes
@@ -845,6 +867,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                         _messageController.text,
                                       );
                                   _messageController.clear();
+                                  _userSentMessageInSession = true;
                                 }
                               },
                               icon: Icon(Icons.send, color: accentColor),

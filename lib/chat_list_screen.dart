@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'Provider/chat_provider.dart';
 import 'chat_screen.dart';
 import 'persona_selection_screen.dart';
@@ -10,6 +11,7 @@ import 'create_challenge_screen.dart';
 import 'Model/model.dart';
 import 'category_challenges_screen.dart';
 import 'challenge_search_screen.dart';
+import 'analytics_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class ChatListScreen extends StatefulWidget {
@@ -46,6 +48,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       provider.fetchActiveSessions();
       provider.fetchAllPersonas();
       provider.fetchUserProfile();
+      _checkWelcomePopup();
     });
   }
 
@@ -1129,6 +1132,61 @@ class _ChatListScreenState extends State<ChatListScreen> {
             ),
             const SizedBox(height: 24),
 
+            // 2.5 Analytics Dashboard access card
+            InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AnalyticsScreen()),
+                );
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [accentColor.withOpacity(0.12), Colors.black38],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: accentColor.withOpacity(0.25)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: accentColor.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.analytics, color: accentColor, size: 22),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'View App Usage & Analytics',
+                            style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Track play duration, favorites, and drop-off rates',
+                            style: TextStyle(color: Colors.white54, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 14),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
             // 3. Role & Background Context
             const Text(
               'ROLE & BACKGROUND CONTEXT',
@@ -1401,6 +1459,160 @@ class _ChatListScreenState extends State<ChatListScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _checkWelcomePopup() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeen = prefs.getBool('has_seen_welcome_popup') ?? false;
+    if (!hasSeen) {
+      if (mounted) {
+        _showWelcomeDialog(context);
+      }
+      await prefs.setBool('has_seen_welcome_popup', true);
+    }
+  }
+
+  void _showWelcomeDialog(BuildContext context) {
+    final theme = Theme.of(context);
+    final accentColor = theme.colorScheme.primary;
+    final cardColor = theme.colorScheme.surface;
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierLabel: 'Welcome',
+      barrierColor: Colors.black.withOpacity(0.85),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (dialogContext, anim1, anim2) {
+        return Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: Colors.white10),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black54,
+                  blurRadius: 20,
+                  offset: Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: accentColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.auto_awesome, color: accentColor, size: 36),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Welcome to Ripple! 🚀',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Before you start exploring, here are a few things to keep in mind:',
+                    style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  _buildDisclaimerItem(
+                    Icons.movie_filter_outlined,
+                    'Purely Fictional Universe',
+                    'All storylines, events, and text generated within the app are complete fiction.',
+                    accentColor,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildDisclaimerItem(
+                    Icons.face_retouching_natural_outlined,
+                    'Virtual Personas Only',
+                    'None of the AI personas are real people. They are simulated game entities.',
+                    accentColor,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildDisclaimerItem(
+                    Icons.videogame_asset_outlined,
+                    'Game Scenarios',
+                    'Challenges are practice game scenarios designed for you to test your strategies and have fun!',
+                    accentColor,
+                  ),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: accentColor,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Got it, Let\'s Play!',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, anim1, anim2, child) {
+        return Transform.scale(
+          scale: anim1.value,
+          child: FadeTransition(
+            opacity: anim1,
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDisclaimerItem(IconData icon, String title, String description, Color accentColor) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: accentColor, size: 22),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.3),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
