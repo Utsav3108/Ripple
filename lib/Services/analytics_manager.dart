@@ -25,6 +25,20 @@ class AnalyticsManager {
       await _prefs?.setString('ga_client_id', _clientId);
     }
 
+    // Check if the app was killed while in the foreground in the previous run
+    final lastStart = _prefs?.getInt('last_session_start_time') ?? 0;
+    final hasPending = _prefs?.getBool('has_pending_session_end') ?? false;
+
+    if (lastStart > 0 && !hasPending) {
+      final lastAction = _prefs?.getInt('last_action_time') ?? lastStart;
+      final elapsedSeconds = ((lastAction - lastStart) / 1000).round();
+      if (elapsedSeconds > 0) {
+        await _prefs?.setInt('pending_session_duration', elapsedSeconds);
+        await _prefs?.setBool('has_pending_session_end', true);
+        await _prefs?.setInt('total_duration_seconds', (_prefs?.getInt('total_duration_seconds') ?? 0) + elapsedSeconds);
+      }
+    }
+
     // Start initial session
     startSession();
   }
@@ -38,10 +52,32 @@ class AnalyticsManager {
     return 'client_${part1}_$part2';
   }
 
+  // Dispatch any queued session ends (from crash, force-close, or background transitions)
+  Future<void> dispatchQueuedEvents() async {
+    final hasPending = _prefs?.getBool('has_pending_session_end') ?? false;
+    if (hasPending) {
+      final elapsed = _prefs?.getInt('pending_session_duration') ?? 0;
+      await _logGAEvent('session_end', {'session_duration_seconds': elapsed});
+      await _prefs?.setBool('has_pending_session_end', false);
+      await _prefs?.remove('last_session_start_time');
+    }
+  }
+
   // Session Tracking
   void startSession() {
     if (_sessionStartTime != null) return;
+    
+    // First, dispatch any queued session end from a previous run or background transition
+    dispatchQueuedEvents();
+
     _sessionStartTime = DateTime.now();
+    final nowMs = _sessionStartTime!.millisecondsSinceEpoch;
+    
+    // Track session timing metadata in SharedPreferences for crash/force-close recovery
+    _prefs?.setInt('last_session_start_time', nowMs);
+    _prefs?.setInt('last_action_time', nowMs);
+    _prefs?.setBool('has_pending_session_end', false);
+
     _prefs?.setInt('total_sessions', (_prefs?.getInt('total_sessions') ?? 0) + 1);
     _logGAEvent('session_start', {});
   }
@@ -49,8 +85,16 @@ class AnalyticsManager {
   void endSession() {
     if (_sessionStartTime == null) return;
     final elapsed = DateTime.now().difference(_sessionStartTime!).inSeconds;
+    
     _prefs?.setInt('total_duration_seconds', (_prefs?.getInt('total_duration_seconds') ?? 0) + elapsed);
+    
+    // Queue the session end event to be sent reliably
+    _prefs?.setInt('pending_session_duration', elapsed);
+    _prefs?.setBool('has_pending_session_end', true);
+
     _sessionStartTime = null;
+    
+    // Attempt best-effort immediate dispatch (works on fast background connections)
     _logGAEvent('session_end', {'session_duration_seconds': elapsed});
   }
 
@@ -160,6 +204,9 @@ class AnalyticsManager {
 
   // Send Event to GA4 Measurement Protocol
   Future<void> _logGAEvent(String eventName, Map<String, dynamic> params) async {
+    // Keep track of the last time the user did something in the app
+    _prefs?.setInt('last_action_time', DateTime.now().millisecondsSinceEpoch);
+
     final measurementId = AppConfig.gaMeasurementId;
     final apiSecret = AppConfig.gaApiSecret;
 
@@ -170,6 +217,15 @@ class AnalyticsManager {
 
     final url = 'https://www.google-analytics.com/mp/collect?measurement_id=$measurementId&api_secret=$apiSecret';
 
+    // Calculate actual active session duration in milliseconds for the GA4 engagement time parameter
+    int engagementTimeMs = 100; // standard minimum value
+    if (eventName == 'session_end' && params.containsKey('session_duration_seconds')) {
+      engagementTimeMs = (params['session_duration_seconds'] as int) * 1000;
+    } else if (_sessionStartTime != null) {
+      engagementTimeMs = DateTime.now().difference(_sessionStartTime!).inMilliseconds;
+      if (engagementTimeMs < 0) engagementTimeMs = 100;
+    }
+
     final body = {
       'client_id': _clientId,
       'events': [
@@ -177,7 +233,7 @@ class AnalyticsManager {
           'name': eventName,
           'params': {
             ...params,
-            'engagement_time_msec': '100', // standard metadata parameter
+            'engagement_time_msec': engagementTimeMs, // type: integer
           },
         }
       ]

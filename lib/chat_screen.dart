@@ -42,6 +42,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _isChallengeCompletedOverlayShown = false;
   Challenge? _selectedNextChallenge;
   bool _userSentMessageInSession = false;
+  bool _challengeCompletedInSession = false;
+  bool _midwayExitTracked = false;
 
   // Timer state variables
   Timer? _timer;
@@ -72,15 +74,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _stopTimer();
 
-    // Track midway exits
-    if (widget.attemptSessionId == null) {
+    // Track midway exits (fallback if not already tracked in onWillPop)
+    if (widget.attemptSessionId == null && !_midwayExitTracked) {
       if (_activeChallenge != null) {
-        if (!_isChallengeCompletedOverlayShown) {
+        if (!_challengeCompletedInSession) {
           AnalyticsManager().trackLeaveChallengeMidway(_activeChallenge!.id, _activeChallenge!.title);
+          _midwayExitTracked = true;
         }
       } else {
         if (!_userSentMessageInSession) {
           AnalyticsManager().trackLeaveChatMidway(_activePersona.id, _activePersona.name);
+          _midwayExitTracked = true;
         }
       }
     }
@@ -356,6 +360,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (_activeChallenge != null && widget.attemptSessionId == null) {
       final isWin = status.startsWith('won') || status == 'won_objective_completed';
       AnalyticsManager().trackCompleteChallenge(_activeChallenge!.id, _activeChallenge!.title, isWin);
+      _challengeCompletedInSession = true;
     }
 
     _stopTimer();
@@ -661,6 +666,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     return WillPopScope(
       onWillPop: () async {
         _stopTimer();
+
+        // Track midway exits here (before popping)
+        if (widget.attemptSessionId == null && !_midwayExitTracked) {
+          if (_activeChallenge != null) {
+            if (!_challengeCompletedInSession) {
+              AnalyticsManager().trackLeaveChallengeMidway(_activeChallenge!.id, _activeChallenge!.title);
+              _midwayExitTracked = true;
+            }
+          } else {
+            if (!_userSentMessageInSession) {
+              AnalyticsManager().trackLeaveChatMidway(_activePersona.id, _activePersona.name);
+              _midwayExitTracked = true;
+            }
+          }
+        }
+
         if (_activeChallenge != null && widget.attemptSessionId == null) {
           // Show a quick loading dialog so the user knows it's saving progress
           showDialog(
