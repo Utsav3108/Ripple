@@ -11,7 +11,6 @@ import 'create_challenge_screen.dart';
 import 'Model/model.dart';
 import 'category_challenges_screen.dart';
 import 'challenge_search_screen.dart';
-import 'analytics_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class ChatListScreen extends StatefulWidget {
@@ -1132,61 +1131,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
             ),
             const SizedBox(height: 24),
 
-            // 2.5 Analytics Dashboard access card
-            InkWell(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const AnalyticsScreen()),
-                );
-              },
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [accentColor.withOpacity(0.12), Colors.black38],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: accentColor.withOpacity(0.25)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: accentColor.withOpacity(0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.analytics, color: accentColor, size: 22),
-                    ),
-                    const SizedBox(width: 16),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'View App Usage & Analytics',
-                            style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Track play duration, favorites, and drop-off rates',
-                            style: TextStyle(color: Colors.white54, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 14),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
             // 3. Role & Background Context
             const Text(
               'ROLE & BACKGROUND CONTEXT',
@@ -1549,7 +1493,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   _buildDisclaimerItem(
                     Icons.videogame_asset_outlined,
                     'Game Scenarios',
-                    'Challenges are practice game scenarios designed for you to test your strategies and have fun!',
+                    'Challenges are fictional scenarios designed to test and develop your abilities across different situations. Have fun!',
                     accentColor,
                   ),
                   const SizedBox(height: 28),

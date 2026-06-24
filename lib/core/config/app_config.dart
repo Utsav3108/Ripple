@@ -3,7 +3,7 @@ class AppConfig {
   
   // Base URLs for API and socket services
   static const String androidBaseUrl = 'https://whatsapp-fastapi-2.onrender.com'; //'http://10.0.2.2:8000'; //'https://nf0np0l7-8000.inc1.devtunnels.ms';
-  static const String iosBaseUrl = 'https://whatsapp-fastapi-2.onrender.com'; //'http://localhost:8000';
+  static const String iosBaseUrl = 'http://localhost:8000';//'https://whatsapp-fastapi-2.onrender.com'; //'http://localhost:8000';
 
   // Google Analytics GA4 Credentials (Measurement Protocol)
   static const String gaMeasurementId = 'G-YN2Q17MQ03'; // Replace with real Measurement ID
