@@ -26,6 +26,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _messageFocusNode = FocusNode();
   bool _isSettingUpChallenge = false;
   ChatProvider? _chatProvider;
 
@@ -50,11 +51,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   int _remainingSeconds = 0;
   bool _hasTimer = false;
   int _lastMessagesLength = 0;
+  double _previousKeyboardHeight = 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _messageFocusNode.addListener(_onFocusChange);
     _activeChallenge = widget.challenge;
     _activePersona = widget.persona;
     _chatProvider = context.read<ChatProvider>();
@@ -92,6 +95,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (_activeChallenge != null && widget.attemptSessionId == null) {
       _chatProvider?.pauseChallengeSession();
     }
+    _messageFocusNode.removeListener(_onFocusChange);
+    _messageFocusNode.dispose();
     _messageController.dispose();
     _scrollController.dispose();
     // Safely clear challenge session and socket callbacks on screen disposal
@@ -103,6 +108,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _chatProvider!.onChallengeCompletedEvent = null;
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    // Fires on every frame of the keyboard slide animation.
+    // We detect a rising keyboard and scroll to bottom in sync.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final keyboardHeight = View.of(context).viewInsets.bottom /
+          View.of(context).devicePixelRatio;
+      if (keyboardHeight > _previousKeyboardHeight) {
+        // Keyboard is opening — scroll to keep latest message above it
+        _scrollToBottom();
+      }
+      _previousKeyboardHeight = keyboardHeight;
+    });
   }
 
   @override
@@ -318,14 +339,37 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
   }
 
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
+  void _scrollToBottom({bool instant = false}) {
+    if (!_scrollController.hasClients) return;
+    final max = _scrollController.position.maxScrollExtent;
+    if (instant || (max - _scrollController.offset) < 80) {
+      // Already near bottom — snap instantly, then smooth into final position
+      _scrollController.jumpTo(max);
+    } else {
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
+        max,
+        duration: const Duration(milliseconds: 340),
+        curve: Curves.fastEaseInToSlowEaseOut,
       );
     }
+  }
+
+  void _onFocusChange() {
+    if (!_messageFocusNode.hasFocus) return;
+    // Listen to keyboard insets via MediaQuery instead of a fixed delay.
+    // This fires at the natural pace of the system keyboard animation.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+      if (keyboardHeight > 0) {
+        _scrollToBottom();
+      } else {
+        // Keyboard not yet up — wait one more frame
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scrollToBottom();
+        });
+      }
+    });
   }
 
   Future<void> _handleCompletion(String status) async {
@@ -788,7 +832,25 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           final messagesCount = provider.messages.length;
                           if (messagesCount != _lastMessagesLength) {
                             _lastMessagesLength = messagesCount;
-                            WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+                            // jumpTo immediately after layout so there's no
+                            // visible frame where the list sits at old position.
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (_scrollController.hasClients) {
+                                final max = _scrollController.position.maxScrollExtent;
+                                // Smooth scroll for incoming AI replies, instant for own messages
+                                final isOwnMessage = provider.messages.isNotEmpty &&
+                                    provider.messages.last.isUser;
+                                if (isOwnMessage) {
+                                  _scrollController.jumpTo(max);
+                                } else {
+                                  _scrollController.animateTo(
+                                    max,
+                                    duration: const Duration(milliseconds: 340),
+                                    curve: Curves.fastEaseInToSlowEaseOut,
+                                  );
+                                }
+                              }
+                            });
                           }
 
                           final hasIntro = provider.currentChallengeIntro != null;
@@ -867,6 +929,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                 ),
                                 child: TextField(
                                   controller: _messageController,
+                                  focusNode: _messageFocusNode,
+                                  onTap: _onFocusChange,
                                   minLines: 1,
                                   maxLines: 3,
                                   style: const TextStyle(color: Colors.white),
