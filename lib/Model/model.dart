@@ -325,3 +325,36 @@ class Category {
     );
   }
 }
+
+class PaginatedMessages {
+  final List<Message> messages;
+  final int page;
+  final int pageSize;
+  final int totalCount;
+  final int totalPages;
+  final bool hasMore;
+
+  PaginatedMessages({
+    required this.messages,
+    required this.page,
+    required this.pageSize,
+    required this.totalCount,
+    required this.totalPages,
+    required this.hasMore,
+  });
+
+  factory PaginatedMessages.fromJson(Map<String, dynamic> json, int currentUserId) {
+    final rawMessages = json['messages'] as List? ?? [];
+    final messagesList = rawMessages
+        .map((m) => Message.fromJson(Map<String, dynamic>.from(m as Map), currentUserId))
+        .toList();
+    return PaginatedMessages(
+      messages: messagesList,
+      page: json['page'] is int ? json['page'] as int : (int.tryParse(json['page']?.toString() ?? '') ?? 1),
+      pageSize: json['page_size'] is int ? json['page_size'] as int : (int.tryParse(json['page_size']?.toString() ?? '') ?? 10),
+      totalCount: json['total_count'] is int ? json['total_count'] as int : (int.tryParse(json['total_count']?.toString() ?? '') ?? 0),
+      totalPages: json['total_pages'] is int ? json['total_pages'] as int : (int.tryParse(json['total_pages']?.toString() ?? '') ?? 1),
+      hasMore: json['has_more'] is bool ? json['has_more'] as bool : (json['has_more']?.toString().toLowerCase() == 'true'),
+    );
+  }
+}

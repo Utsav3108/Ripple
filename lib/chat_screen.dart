@@ -45,12 +45,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _userSentMessageInSession = false;
   bool _challengeCompletedInSession = false;
   bool _midwayExitTracked = false;
+  final Set<String> _animatedMessageIds = {};
 
   // Timer state variables
   Timer? _timer;
   int _remainingSeconds = 0;
   bool _hasTimer = false;
-  int _lastMessagesLength = 0;
   double _previousKeyboardHeight = 0;
 
   @override
@@ -58,12 +58,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _messageFocusNode.addListener(_onFocusChange);
+    _scrollController.addListener(_onScroll);
     _activeChallenge = widget.challenge;
     _activePersona = widget.persona;
     _chatProvider = context.read<ChatProvider>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeChat();
     });
+  }
+
+// 1. _onScroll — trigger load when user reaches the TOP (maxScrollExtent in reversed list)
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 120 && !pos.outOfRange) {
+      context.read<ChatProvider>().loadMoreMessages();
+    }
   }
 
   @override
@@ -110,17 +120,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
+// 3. didChangeMetrics — only scroll to bottom if user was already there
   @override
   void didChangeMetrics() {
-    // Fires on every frame of the keyboard slide animation.
-    // We detect a rising keyboard and scroll to bottom in sync.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final keyboardHeight = View.of(context).viewInsets.bottom /
-          View.of(context).devicePixelRatio;
+      final keyboardHeight =
+          View.of(context).viewInsets.bottom / View.of(context).devicePixelRatio;
       if (keyboardHeight > _previousKeyboardHeight) {
-        // Keyboard is opening — scroll to keep latest message above it
-        _scrollToBottom();
+        // Keyboard opening — only follow to bottom if already near it
+        if (_scrollController.hasClients && _scrollController.offset < 80) {
+          _scrollToBottom();
+        }
       }
       _previousKeyboardHeight = keyboardHeight;
     });
@@ -339,16 +350,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     });
   }
 
+// 2. _scrollToBottom — in a reversed list, "bottom" is offset 0
   void _scrollToBottom({bool instant = false}) {
     if (!_scrollController.hasClients) return;
-    final max = _scrollController.position.maxScrollExtent;
-    if (instant || (max - _scrollController.offset) < 80) {
-      // Already near bottom — snap instantly, then smooth into final position
-      _scrollController.jumpTo(max);
+    if (instant || _scrollController.offset < 80) {
+      _scrollController.jumpTo(0);
     } else {
       _scrollController.animateTo(
-        max,
-        duration: const Duration(milliseconds: 340),
+        0,
+        duration: const Duration(milliseconds: 300),
         curve: Curves.fastEaseInToSlowEaseOut,
       );
     }
@@ -829,47 +839,31 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             return const Center(child: CircularProgressIndicator());
                           }
 
-                          final messagesCount = provider.messages.length;
-                          if (messagesCount != _lastMessagesLength) {
-                            _lastMessagesLength = messagesCount;
-                            // jumpTo immediately after layout so there's no
-                            // visible frame where the list sits at old position.
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (_scrollController.hasClients) {
-                                final max = _scrollController.position.maxScrollExtent;
-                                // Smooth scroll for incoming AI replies, instant for own messages
-                                final isOwnMessage = provider.messages.isNotEmpty &&
-                                    provider.messages.last.isUser;
-                                if (isOwnMessage) {
-                                  _scrollController.jumpTo(max);
-                                } else {
-                                  _scrollController.animateTo(
-                                    max,
-                                    duration: const Duration(milliseconds: 340),
-                                    curve: Curves.fastEaseInToSlowEaseOut,
-                                  );
-                                }
-                              }
-                            });
-                          }
-
-                          final hasIntro = provider.currentChallengeIntro != null;
+                           final hasIntro = provider.currentChallengeIntro != null;
                           final itemCount = provider.messages.length + (hasIntro ? 1 : 0);
 
+                          // 4. ListView.builder — reverse: true + reversed index mapping
                           return ListView.builder(
                             controller: _scrollController,
                             padding: const EdgeInsets.all(16),
+                            reverse: true,           // ← newest message at bottom, offset 0
                             itemCount: itemCount,
                             itemBuilder: (context, index) {
-                              if (hasIntro && index == 0) {
+                              // In a reversed list:
+                              //   index 0          → newest message   (bottom of screen)
+                              //   index messageCount → intro card      (top of screen, loaded last)
+                              final messageCount = provider.messages.length;
+
+                              if (hasIntro && index == messageCount) {
+                                // Intro/storyline card sits above all messages
                                 return _buildStorylineCard(theme, provider.currentChallengeIntro!);
                               }
 
-                              final messageIndex = hasIntro ? index - 1 : index;
-                              final message = provider.messages[messageIndex];
+                              // Map reversed index → message (0 = last/newest, messageCount-1 = first/oldest)
+                              final message = provider.messages[messageCount - 1 - index];
                               final isMe = message.isUser;
 
-                              return Align(
+                              final bubble = Align(
                                 alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                                 child: Container(
                                   margin: const EdgeInsets.only(bottom: 12),
@@ -908,6 +902,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                   ),
                                 ),
                               );
+
+// Only animate index 0 — the most recently arrived message
+                              return index == 0
+                                  ? _buildAnimatedMessage("${message.id}", bubble)  // ← use message.id or a unique key
+                                  : bubble;
                             },
                           );
                         },
@@ -1512,5 +1511,30 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _skipNarrationForReplay = false;
     });
     _initializeChat();
+  }
+
+  Widget _buildAnimatedMessage(String messageId, Widget child) {
+    final isNew = !_animatedMessageIds.contains(messageId);
+    if (isNew) {
+      _animatedMessageIds.add(messageId);
+    }
+
+    if (!isNew) return child;
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 24 * (1 - value)), // slides up 24px
+          child: Opacity(
+            opacity: value,
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
   }
 }

@@ -43,6 +43,14 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
   String? _errorMessage;
   int? _activePersonaId;
 
+  bool _hasMoreMessages = false;
+  bool _isFetchingOlderMessages = false;
+  int _currentMessagePage = 1;
+  int _totalMessagePages = 1;
+
+  bool get hasMoreMessages => _hasMoreMessages;
+  bool get isFetchingOlderMessages => _isFetchingOlderMessages;
+
   List<ChallengeSession> _activeSessions = [];
   List<ChallengeSession> get activeSessions => _activeSessions;
   bool _isActiveSessionsLoading = false;
@@ -389,6 +397,44 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     notifyListeners();
   }
 
+  Future<PaginatedMessages?> fetchConversationPage({
+    int page = 1,
+    int pageSize = 10,
+    int? senderId,
+    int? receiverId,
+    int? challengeSessionId,
+    int? attemptSessionId,
+  }) async {
+    try {
+      final bodyParams = <String, dynamic>{
+        'page': page,
+        'page_size': pageSize,
+      };
+      if (senderId != null) bodyParams['sender_id'] = senderId;
+      if (receiverId != null) bodyParams['receiver_id'] = receiverId;
+      if (challengeSessionId != null) bodyParams['challenge_session_id'] = challengeSessionId;
+      if (attemptSessionId != null) bodyParams['attempt_session_id'] = attemptSessionId;
+
+      final request = Request(
+        url: '/conversations',
+        method: HTTPMethod.GET,
+        body: bodyParams,
+      );
+
+      final response = await _network.performRequest(request);
+
+      if (response.data is Map) {
+        return PaginatedMessages.fromJson(
+          Map<String, dynamic>.from(response.data as Map),
+          _currentUserId!,
+        );
+      }
+    } catch (e) {
+      print("Error fetching conversation page: $e");
+    }
+    return null;
+  }
+
   Future<void> fetchMessages(int receiverId) async {
     _activePersonaId = receiverId;
     
@@ -405,24 +451,26 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     _socketManager.emitJoin(receiverId); // Join persona's socket room
     _isMessagesLoading = true;
     _messages = [];
+    
+    // Reset pagination state
+    _currentMessagePage = 1;
+    _hasMoreMessages = false;
+    _totalMessagePages = 1;
+    
     notifyListeners();
 
     try {
-      final request = Request(
-        url: '/messages',
-        method: HTTPMethod.GET,
-        body: {
-          'sender_id': _currentUserId!,
-          'receiver_id': receiverId,
-        },
+      final result = await fetchConversationPage(
+        page: 1,
+        pageSize: 10,
+        senderId: _currentUserId!,
+        receiverId: receiverId,
       );
 
-      final response = await _network.performRequest(request);
-
-      if (response.data is List) {
-        _messages = (response.data as List)
-            .map((json) => Message.fromJson(json, _currentUserId!))
-            .toList();
+      if (result != null) {
+        _messages = result.messages;
+        _hasMoreMessages = result.hasMore;
+        _totalMessagePages = result.totalPages;
       }
     } catch (e) {
       print("Error fetching messages: $e");
@@ -430,6 +478,39 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
       _isMessagesLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<void> loadMoreMessages() async {
+    if (_isFetchingOlderMessages || !_hasMoreMessages) return;
+    _isFetchingOlderMessages = true;
+    notifyListeners();
+
+    final nextPage = _currentMessagePage + 1;
+    PaginatedMessages? result;
+
+    if (_currentChallengeSessionId != null) {
+      result = await fetchConversationPage(
+        page: nextPage,
+        pageSize: 10,
+        challengeSessionId: _currentChallengeSessionId,
+      );
+    } else if (_activePersonaId != null) {
+      result = await fetchConversationPage(
+        page: nextPage,
+        pageSize: 10,
+        senderId: _currentUserId!,
+        receiverId: _activePersonaId,
+      );
+    }
+
+    if (result != null) {
+      _messages.insertAll(0, result.messages); // Prepend older messages
+      _currentMessagePage = nextPage;
+      _hasMoreMessages = result.hasMore;
+    }
+    
+    _isFetchingOlderMessages = false;
+    notifyListeners();
   }
 
   Future<void> fetchAllPersonas() async {
@@ -773,13 +854,23 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
             ? rawElapsed 
             : (rawElapsed != null ? int.tryParse(rawElapsed.toString()) ?? 0 : 0);
 
-        // Parse conversation history from setup challenge directly
-        if (data['conversation_history'] is List) {
-          _messages = (data['conversation_history'] as List)
-              .map((json) => Message.fromJson(Map<String, dynamic>.from(json as Map), _currentUserId!))
-              .toList();
-        } else {
-          _messages = [];
+        // Reset pagination state
+        _currentMessagePage = 1;
+        _hasMoreMessages = false;
+        _totalMessagePages = 1;
+        _messages = [];
+
+        if (_currentChallengeSessionId != null) {
+          final result = await fetchConversationPage(
+            page: 1,
+            pageSize: 10,
+            challengeSessionId: _currentChallengeSessionId,
+          );
+          if (result != null) {
+            _messages = result.messages;
+            _hasMoreMessages = result.hasMore;
+            _totalMessagePages = result.totalPages;
+          }
         }
 
         // Bypassing socket connections for read-only historical attempt viewers
