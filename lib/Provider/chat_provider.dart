@@ -1079,6 +1079,46 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     }
   }
 
+  String? getPromptForMessage(Message msg) {
+    final index = _messages.indexOf(msg);
+    if (index > 0 && _messages[index - 1].isUser) {
+      return _messages[index - 1].text;
+    }
+    return null;
+  }
+
+  Future<bool> reportAIContent({
+    required int messageId,
+    required int personaId,
+    required String aiResponse,
+    required String reason,
+    int? conversationId,
+    String? userPrompt,
+    String? comment,
+  }) async {
+    try {
+      final request = Request(
+        url: '/reports/ai-content',
+        method: HTTPMethod.POST,
+        body: {
+          'message_id': messageId,
+          'persona_id': personaId,
+          'ai_response': aiResponse,
+          'reason': reason,
+          if (conversationId != null) 'conversation_id': conversationId,
+          if (userPrompt != null) 'user_prompt': userPrompt,
+          if (comment != null) 'description': comment,
+        },
+      );
+
+      final response = await _network.performRequest(request);
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      print("Error reporting AI content: $e");
+      return false;
+    }
+  }
+
   Future<void> pauseChallengeSession() async {
     if (_currentChallengeSessionId == null) return;
     try {

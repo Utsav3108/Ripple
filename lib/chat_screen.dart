@@ -863,44 +863,55 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               final message = provider.messages[messageCount - 1 - index];
                               final isMe = message.isUser;
 
-                              final bubble = Align(
-                                alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                                child: Container(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: isMe ? accentColor : theme.colorScheme.surface,
-                                    borderRadius: BorderRadius.only(
-                                      topLeft: const Radius.circular(16),
-                                      topRight: const Radius.circular(16),
-                                      bottomLeft: Radius.circular(isMe ? 16 : 0),
-                                      bottomRight: Radius.circular(isMe ? 0 : 16),
-                                    ),
-                                  ),
-                                  constraints: BoxConstraints(
-                                    maxWidth: MediaQuery.of(context).size.width * 0.75,
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        message.text,
-                                        style: TextStyle(
-                                          color: isMe ? Colors.black : Colors.white,
-                                          fontSize: 15,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        message.timeStampString,
-                                        style: TextStyle(
-                                          color: isMe ? Colors.black54 : Colors.white54,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ],
+                              Widget bubbleContent = Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: isMe ? accentColor : theme.colorScheme.surface,
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: const Radius.circular(16),
+                                    topRight: const Radius.circular(16),
+                                    bottomLeft: Radius.circular(isMe ? 16 : 0),
+                                    bottomRight: Radius.circular(isMe ? 0 : 16),
                                   ),
                                 ),
+                                constraints: BoxConstraints(
+                                  maxWidth: MediaQuery.of(context).size.width * 0.75,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      message.text,
+                                      style: TextStyle(
+                                        color: isMe ? Colors.black : Colors.white,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      message.timeStampString,
+                                      style: TextStyle(
+                                        color: isMe ? Colors.black54 : Colors.white54,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+
+                              if (!isMe) {
+                                bubbleContent = GestureDetector(
+                                  onLongPress: () {
+                                    _showReportBottomSheet(context, message);
+                                  },
+                                  child: bubbleContent,
+                                );
+                              }
+
+                              final bubble = Align(
+                                alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                                child: bubbleContent,
                               );
 
 // Only animate index 0 — the most recently arrived message
@@ -1535,6 +1546,212 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         );
       },
       child: child,
+    );
+  }
+
+  void _showReportBottomSheet(BuildContext context, Message message) {
+    final theme = Theme.of(context);
+    final provider = context.read<ChatProvider>();
+    final reasons = [
+      "Hate Speech or Harassment",
+      "Sexually Explicit Content",
+      "Dangerous or Harmful Content",
+      "Deceptive or Fraudulent Behavior",
+      "Other"
+    ];
+    String selectedReason = reasons[0];
+    final commentController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.onSurface.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    "Report AI Response",
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Help us ensure Google Play safety standards by reporting content that is offensive, harmful, or deceptive.",
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    "Select Reason",
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: theme.colorScheme.outline.withOpacity(0.5)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedReason,
+                        dropdownColor: theme.colorScheme.surface,
+                        icon: Icon(Icons.arrow_drop_down, color: theme.colorScheme.onSurface),
+                        isExpanded: true,
+                        style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 14),
+                        items: reasons.map((String reason) {
+                          return DropdownMenuItem<String>(
+                            value: reason,
+                            child: Text(reason),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setModalState(() {
+                              selectedReason = value;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    "Additional Comment (Optional)",
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: commentController,
+                    style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 14),
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      hintText: "Tell us more...",
+                      hintStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.4)),
+                      filled: true,
+                      fillColor: theme.colorScheme.surfaceContainerHighest,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.5)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: theme.colorScheme.outline.withOpacity(0.5)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: theme.colorScheme.primary),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            "Cancel",
+                            style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.6)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.error,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          onPressed: () async {
+                            final userPrompt = provider.getPromptForMessage(message);
+                            final success = await provider.reportAIContent(
+                              messageId: message.id,
+                              personaId: message.senderId,
+                              aiResponse: message.text,
+                              reason: selectedReason,
+                              conversationId: provider.currentChallengeSessionId,
+                              userPrompt: userPrompt,
+                              comment: commentController.text.trim().isEmpty
+                                  ? null
+                                  : commentController.text.trim(),
+                            );
+                            if (mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  backgroundColor: success ? Colors.green : theme.colorScheme.error,
+                                  content: Text(
+                                    success
+                                        ? "Report submitted successfully. Thank you!"
+                                        : "Failed to submit report. Please try again.",
+                                    style: TextStyle(
+                                      color: success ? Colors.white : theme.colorScheme.onError,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                          child: Text(
+                            "Submit",
+                            style: TextStyle(
+                              color: theme.colorScheme.onError,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
