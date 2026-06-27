@@ -1,5 +1,5 @@
 class AppConfig {
-  static const String serverClientId = '355182784333-s64rohm8js4mslqb1827rajuajn4191n.apps.googleusercontent.com';
+  static const String serverClientId = '355182784333-1eaf79s1213ktrt2pubp4g6qdfqvu390.apps.googleusercontent.com';
   
   // Base URLs for API and socket services
   static const String androidBaseUrl = 'https://whatsapp-fastapi-2.onrender.com'; //'http://10.0.2.2:8000'; //'https://nf0np0l7-8000.inc1.devtunnels.ms';
