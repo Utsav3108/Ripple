@@ -927,45 +927,59 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       _buildReadOnlyResultBanner(theme, context.watch<ChatProvider>().currentChallengeStatus)
                     else
                       Container(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         color: Colors.black,
-                        child: Row(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Expanded(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.surface,
-                                  borderRadius: BorderRadius.circular(24),
-                                ),
-                                child: TextField(
-                                  controller: _messageController,
-                                  focusNode: _messageFocusNode,
-                                  onTap: _onFocusChange,
-                                  minLines: 1,
-                                  maxLines: 3,
-                                  style: const TextStyle(color: Colors.white),
-                                  decoration: const InputDecoration(
-                                    hintText: 'Type a message...',
-                                    hintStyle: TextStyle(color: Colors.white54),
-                                    border: InputBorder.none,
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.surface,
+                                      borderRadius: BorderRadius.circular(24),
+                                    ),
+                                    child: TextField(
+                                      controller: _messageController,
+                                      focusNode: _messageFocusNode,
+                                      onTap: _onFocusChange,
+                                      minLines: 1,
+                                      maxLines: 3,
+                                      style: const TextStyle(color: Colors.white),
+                                      decoration: const InputDecoration(
+                                        hintText: 'Type a message...',
+                                        hintStyle: TextStyle(color: Colors.white54),
+                                        border: InputBorder.none,
+                                        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  onPressed: () {
+                                    if (_messageController.text.isNotEmpty) {
+                                      context.read<ChatProvider>().sendMessage(
+                                            _activePersona.id,
+                                            _messageController.text,
+                                          );
+                                      _messageController.clear();
+                                      _userSentMessageInSession = true;
+                                    }
+                                  },
+                                  icon: Icon(Icons.send, color: accentColor),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              onPressed: () {
-                                if (_messageController.text.isNotEmpty) {
-                                  context.read<ChatProvider>().sendMessage(
-                                        _activePersona.id,
-                                        _messageController.text,
-                                      );
-                                  _messageController.clear();
-                                  _userSentMessageInSession = true;
-                                }
-                              },
-                              icon: Icon(Icons.send, color: accentColor),
+                            const SizedBox(height: 8),
+                            Text(
+                              "This is an AI roleplay. Responses are fictional—have fun!",
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface.withOpacity(0.5),
+                                fontSize: 11,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
                           ],
                         ),
