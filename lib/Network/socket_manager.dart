@@ -97,6 +97,15 @@ class SocketManager {
     socket.emit('complete_challenge', payload);
   }
 
+  void emitLeaveChat(int userId, {int? personaId, int? challengeSessionId}) {
+    print("DEBUG: SocketManager.emitLeaveChat emitting leave_chat event for user $userId, persona $personaId, session $challengeSessionId");
+    socket.emit('leave_chat', {
+      'user_id': userId,
+      if (personaId != null) 'persona_id': personaId,
+      if (challengeSessionId != null) 'challenge_session_id': challengeSessionId,
+    });
+  }
+
   void disconnect() {
     socket.disconnect();
   }

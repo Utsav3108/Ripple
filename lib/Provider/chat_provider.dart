@@ -448,7 +448,7 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     } catch (_) {}
     AnalyticsManager().trackPlayPersona(receiverId, personaName);
 
-    _socketManager.emitJoin(receiverId); // Join persona's socket room
+    _socketManager.emitJoin(_currentUserId!); // Join user's socket room
     _isMessagesLoading = true;
     _messages = [];
     
@@ -1117,6 +1117,15 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
       print("Error reporting AI content: $e");
       return false;
     }
+  }
+
+  void leaveChat(int userId, {int? personaId, int? challengeSessionId}) {
+    print("DEBUG: ChatProvider.leaveChat called for user $userId, persona $personaId, session $challengeSessionId");
+    _socketManager.emitLeaveChat(
+      userId,
+      personaId: personaId,
+      challengeSessionId: challengeSessionId,
+    );
   }
 
   Future<void> pauseChallengeSession() async {

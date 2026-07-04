@@ -112,10 +112,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     // Safely clear challenge session and socket callbacks on screen disposal
     if (_chatProvider != null) {
       final provider = _chatProvider!;
+      final currentUserId = provider.currentUserId;
+      final personaId = _activePersona.id;
+      final challengeSessionId = provider.currentChallengeSessionId;
+      if (currentUserId != null) {
+        provider.leaveChat(
+          currentUserId,
+          personaId: personaId,
+          challengeSessionId: challengeSessionId,
+        );
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         provider.clearChallengeSession();
       });
-      _chatProvider!.onChallengeCompletedEvent = null;
+      provider.onChallengeCompletedEvent = null;
     }
     super.dispose();
   }
