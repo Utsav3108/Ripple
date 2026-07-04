@@ -1,4 +1,4 @@
-package com.ripple.ripple
+package com.utsav.ripple
 
 import io.flutter.embedding.android.FlutterActivity
 

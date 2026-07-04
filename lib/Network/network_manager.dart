@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import '../core/config/app_config.dart';
 
 enum HTTPMethod { GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS }
 
@@ -14,17 +15,30 @@ class Request {
 }
 
 class Network {
-  static String getBaseURL() {
-
-    final baseUrl = Platform.isAndroid
-        ? 'http://10.0.2.2:8000'
-        : 'http://localhost:8000';
-    return baseUrl;
-  }
+  static final Network _instance = Network._internal();
+  factory Network() => _instance;
 
   final Dio dio = Dio();
+  String? _token;
+  void Function()? onUnauthorised;
 
-  Network();
+  Network._internal();
+
+  void setToken(String token) {
+    _token = token;
+    dio.options.headers['Authorization'] = 'Bearer $token';
+  }
+
+  void clearToken() {
+    _token = null;
+    dio.options.headers.remove('Authorization');
+  }
+
+  static String getBaseURL() {
+    return Platform.isAndroid
+        ? AppConfig.androidBaseUrl
+        : AppConfig.iosBaseUrl;
+  }
 
   Future<Response> performRequest(Request request) async {
     try {
@@ -44,9 +58,23 @@ class Network {
             type: APIExceptionType.ServerUnderMaintenance,
           );
         case DioExceptionType.badResponse:
+          final responseData = e.response?.data;
+          String errorMsg = "Bad Response";
+          if (responseData is Map && responseData.containsKey('detail')) {
+            errorMsg = responseData['detail'].toString();
+          } else if (responseData is Map && responseData.containsKey('message')) {
+            errorMsg = responseData['message'].toString();
+          } else if (e.response?.statusMessage != null) {
+            errorMsg = e.response!.statusMessage!;
+          }
+          final isUnauthorised = e.response?.statusCode == 401 || e.response?.statusCode == 403;
+          if (isUnauthorised && onUnauthorised != null) {
+            onUnauthorised!();
+          }
           throw APIExceptions(
-            message: "Bad Response",
-            type: APIExceptionType.badResponse,
+            message: errorMsg,
+            type: isUnauthorised ? APIExceptionType.unAuthorised : APIExceptionType.badResponse,
+            statusCode: e.response?.statusCode,
           );
         case DioExceptionType.connectionTimeout:
           throw Exception("Connection Timeout");
@@ -59,6 +87,7 @@ class Network {
 
   _log(Request request, Response res) {
     print("Response for ${request.url}");
+    print("body: ${request.body}");
     print(res.data);
   }
 
@@ -66,15 +95,21 @@ class Network {
     if (res.statusCode == 200) {
       return true;
     } else if (res.data is Map<String, dynamic>) {
-      if (res.data["status"] == 403) {
+      final status = res.data["status"];
+      if (status == 403 || status == 401) {
+        if (onUnauthorised != null) {
+          onUnauthorised!();
+        }
         throw APIExceptions(
-          message: res.data["message"],
-          statusCode: res.data["status"] as int,
+          message: res.data["message"] ?? "Unauthorised",
+          type: APIExceptionType.unAuthorised,
+          statusCode: status as int,
         );
-      } else if (res.data["status"] == 500) {
+      } else if (status == 500) {
         throw APIExceptions(
           message: "Server is under maintenance..",
-          statusCode: res.data["status"] as int,
+          type: APIExceptionType.ServerUnderMaintenance,
+          statusCode: status as int,
         );
       }
     }
@@ -84,11 +119,13 @@ class Network {
   Future<Response> send({required Request request}) {
     switch (request.method) {
       case HTTPMethod.GET:
-        return dio.get(createURL(endpoint: request.url), data: request.body);
+        return dio.get(
+          createURL(endpoint: request.url),
+          queryParameters: request.body is Map<String, dynamic> ? request.body : null,
+        );
       case HTTPMethod.POST:
         return dio.post(createURL(endpoint: request.url), data: request.body);
       case HTTPMethod.PUT:
-        print("PUT request for ${request.body}");
         return dio.put(createURL(endpoint: request.url), data: request.body);
       case HTTPMethod.DELETE:
         return dio.delete(createURL(endpoint: request.url), data: request.body);
@@ -123,6 +160,3 @@ class APIExceptions implements Exception {
   @override
   String toString() => message;
 }
-
-
-
