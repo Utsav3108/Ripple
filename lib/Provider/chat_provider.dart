@@ -1047,6 +1047,29 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     }
   }
 
+  Future<void> deleteUserAccount() async {
+    _isProfileLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final request = Request(
+        url: '/profile',
+        method: HTTPMethod.DELETE,
+      );
+
+      await _network.performRequest(request);
+      await logout();
+    } catch (e) {
+      _errorMessage = e.toString();
+      print("Error deleting user account: $e");
+      rethrow;
+    } finally {
+      _isProfileLoading = false;
+      notifyListeners();
+    }
+  }
+
   List<Category> _categories = [];
   List<Category> get categories => _categories;
   bool _isCategoriesLoading = false;

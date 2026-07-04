@@ -12,6 +12,8 @@ import 'Model/model.dart';
 import 'category_challenges_screen.dart';
 import 'challenge_search_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'Network/network_manager.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -1372,6 +1374,66 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+
+            // Privacy Policy Button
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final url = Uri.parse('${Network.getBaseURL()}/privacy');
+                  try {
+                    final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+                    if (!launched) {
+                      await launchUrl(url);
+                    }
+                  } catch (e) {
+                    try {
+                      await launchUrl(url);
+                    } catch (e2) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Could not open browser. Link: $url')),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(Icons.privacy_tip_outlined, color: Colors.white70, size: 18),
+                label: const Text(
+                  'Privacy Policy',
+                  style: TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.white24, width: 1),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Delete Account Button
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  _showDeleteAccountDialog(context);
+                },
+                icon: const Icon(Icons.delete_forever, color: Colors.white, size: 18),
+                label: const Text(
+                  'Delete Account',
+                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(height: 24),
           ],
         ),
@@ -1403,6 +1465,75 @@ class _ChatListScreenState extends State<ChatListScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showDeleteAccountDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+              SizedBox(width: 8),
+              Text(
+                'Delete Account',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: const Text(
+            'This action is permanent and cannot be undone. Deleting your account will immediately remove all of your profile information, chat messages, challenge attempts, and all records of games you have played. Do you want to proceed?',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white54, fontWeight: FontWeight.w600),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop(); // Close dialog
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(child: CircularProgressIndicator()),
+                );
+                
+                try {
+                  await context.read<ChatProvider>().deleteUserAccount();
+                } catch (e) {
+                  if (context.mounted) {
+                    Navigator.of(context).pop(); // Hide loading indicator
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to delete account: $e'),
+                        backgroundColor: Colors.redAccent,
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text(
+                'Delete',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
