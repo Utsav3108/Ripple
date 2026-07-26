@@ -21,6 +21,11 @@ This document describes the Socket.IO events handled by the backend server in `s
 - **Payload:** `{ "user_id": int }`
 - **Response:** None
 
+### `check_unblock_status`
+- **Description:** On-demand poll for whether a persona session that was previously blocked (arousal threshold or repeated content violations) has since auto-unblocked. Reuses the same lazy unblock-on-load logic as a normal chat turn — no server-side timer/scheduler involved. If the session is still blocked, nothing is emitted.
+- **Payload:** `{ "user_id": int, "persona_id": int }`
+- **Response:** `persona_unblocked` emitted privately to the requesting client only (not broadcast to the room) if the persona is no longer blocked.
+
 ---
 
 ## Challenge Events
@@ -81,6 +86,20 @@ This document describes the Socket.IO events handled by the backend server in `s
   - `text` (string): Message text
   - `image_object_name` (string, optional): Name of the image object if present
   - `challenge_session_id` (int, optional): Challenge session ID if message is part of a challenge
+  - `persona_session_id` (int, optional): The persona session this message belongs to (regular chat only, `null` for challenges). Server-assigned — clients never set this on `send_message`, only read it here to track the active session for a given (persona, user) pair.
+
+
+### `persona_blocked`
+- **Description:** (Emitted by server) Fires on the exact turn a persona session transitions into the blocked state (arousal threshold or repeated content violations) — not on subsequent turns while already blocked. Emitted to the same room as, and alongside, that turn's `receive_message` (the in-character canned refusal) — these are two independent signals, not a replacement for one another.
+- **Payload:**
+  - `persona_session_id` (int): The persona session that just became blocked
+  - `block_reason` (string): `"arousal_threshold"` or `"repeated_content_violations"`
+  - `blocked_until` (string, ISO 8601): When the block auto-expires
+
+### `persona_unblocked`
+- **Description:** (Emitted by server, private) Notifies a single requesting client, in response to `check_unblock_status`, that a persona session is no longer blocked. Never broadcast to the room.
+- **Payload:**
+  - `persona_session_id` (int): The persona session that is now unblocked
 
 
 ---

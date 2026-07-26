@@ -4,10 +4,13 @@ import 'chat_list_screen.dart';
 import 'login_screen.dart';
 import 'Provider/chat_provider.dart';
 import 'Theme/app_theme.dart';
+import 'Services/notification_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService().init();
   runApp(
     MultiProvider(
       providers: [

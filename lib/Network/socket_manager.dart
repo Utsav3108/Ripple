@@ -12,6 +12,12 @@ class SocketManager {
   // Callback when a challenge is completed from server
   Function(Map<String, dynamic>)? onChallengeCompleted;
 
+  // Callback when a persona is blocked
+  Function(Map<String, dynamic>)? onPersonaBlocked;
+
+  // Callback when a persona is unblocked
+  Function(Map<String, dynamic>)? onPersonaUnblocked;
+
   void connect(int userId) {
     socket = IO.io(_baseUrl, IO.OptionBuilder()
       .setTransports(['websocket']) // for Flutter or Dart VM
@@ -66,8 +72,55 @@ class SocketManager {
       }
     });
 
+    socket.on('persona_blocked', (data) {
+      print('Received persona_blocked: $data');
+      if (onPersonaBlocked != null) {
+        try {
+          Map<String, dynamic> blockedData;
+          if (data is String) {
+            blockedData = jsonDecode(data);
+          } else if (data is Map) {
+            blockedData = Map<String, dynamic>.from(data);
+          } else {
+            print('Unexpected persona_blocked data type: ${data.runtimeType}');
+            return;
+          }
+          onPersonaBlocked!(blockedData);
+        } catch (e) {
+          print('Error parsing persona_blocked event: $e');
+        }
+      }
+    });
+
+    socket.on('persona_unblocked', (data) {
+      print('Received persona_unblocked: $data');
+      if (onPersonaUnblocked != null) {
+        try {
+          Map<String, dynamic> unblockedData;
+          if (data is String) {
+            unblockedData = jsonDecode(data);
+          } else if (data is Map) {
+            unblockedData = Map<String, dynamic>.from(data);
+          } else {
+            print('Unexpected persona_unblocked data type: ${data.runtimeType}');
+            return;
+          }
+          onPersonaUnblocked!(unblockedData);
+        } catch (e) {
+          print('Error parsing persona_unblocked event: $e');
+        }
+      }
+    });
+
     socket.onDisconnect((_) => print('Disconnected from socket server'));
     socket.onConnectError((err) => print('Connect Error: $err'));
+  }
+
+  void emitCheckUnblockStatus(int userId, int personaId) {
+    socket.emit('check_unblock_status', {
+      'user_id': userId,
+      'persona_id': personaId,
+    });
   }
 
   void emitJoin(int userId) {

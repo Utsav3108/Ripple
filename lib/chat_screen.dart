@@ -6,6 +6,7 @@ import 'Model/model.dart';
 import 'Model/narration_parser.dart';
 import 'Provider/chat_provider.dart';
 import 'Services/analytics_manager.dart';
+import 'Services/notification_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final Persona persona;
@@ -53,6 +54,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _hasTimer = false;
   double _previousKeyboardHeight = 0;
 
+  // Block timer state variables
+  Timer? _blockTimer;
+  int _blockRemainingSeconds = 0;
+
   @override
   void initState() {
     super.initState();
@@ -86,6 +91,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopTimer();
+    _stopBlockTimer();
 
     // Track midway exits (fallback if not already tracked in onWillPop)
     if (widget.attemptSessionId == null && !_midwayExitTracked) {
@@ -726,6 +732,24 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     final isChallengeMode = _activeChallenge != null;
     final provider = context.watch<ChatProvider>();
+    final isBlocked = provider.isPersonaBlocked(_activePersona.id);
+    
+    if (isBlocked && _blockTimer == null) {
+      final blockedUntil = provider.getBlockedUntil(_activePersona.id);
+      if (blockedUntil != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _blockTimer == null) {
+            _startBlockTimer(blockedUntil);
+          }
+        });
+      }
+    } else if (!isBlocked && _blockTimer != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _blockTimer != null) {
+          _stopBlockTimer();
+        }
+      });
+    }
 
     return WillPopScope(
       onWillPop: () async {
@@ -767,17 +791,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             CircleAvatar(
               radius: 18,
               backgroundColor: theme.colorScheme.surface,
-              backgroundImage: _activePersona.imageUrl != null && _activePersona.imageUrl!.isNotEmpty
+              backgroundImage: !isBlocked && _activePersona.imageUrl != null && _activePersona.imageUrl!.isNotEmpty
                   ? CachedNetworkImageProvider(_activePersona.imageUrl!)
                   : null,
-              onBackgroundImageError: _activePersona.imageUrl != null && _activePersona.imageUrl!.isNotEmpty
+              onBackgroundImageError: !isBlocked && _activePersona.imageUrl != null && _activePersona.imageUrl!.isNotEmpty
                   ? (exception, stackTrace) {
                       print("Exception caught while fetching image for ${_activePersona.name}: $exception");
                     }
                   : null,
-              child: _activePersona.imageUrl == null || _activePersona.imageUrl!.isEmpty
-                  ? Text(_activePersona.name[0], style: const TextStyle(fontSize: 14))
-                  : null,
+              child: isBlocked
+                  ? const Icon(Icons.person, size: 20, color: Colors.white54)
+                  : (_activePersona.imageUrl == null || _activePersona.imageUrl!.isEmpty
+                      ? Text(_activePersona.name[0], style: const TextStyle(fontSize: 14))
+                      : null),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -935,6 +961,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     ),
                     if (widget.attemptSessionId != null)
                       _buildReadOnlyResultBanner(theme, context.watch<ChatProvider>().currentChallengeStatus)
+                    else if (isBlocked)
+                      _buildBlockedCard(theme, provider)
                     else
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1776,6 +1804,188 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           },
         );
       },
+    );
+  }
+  void _startBlockTimer(DateTime blockedUntil) {
+    _stopBlockTimer();
+    
+    // Immediate query when entering blocked state
+    _chatProvider?.checkUnblockStatus(_activePersona.id);
+
+    final now = DateTime.now();
+    _blockRemainingSeconds = blockedUntil.difference(now).inSeconds;
+    if (_blockRemainingSeconds <= 0) {
+      _blockRemainingSeconds = 0;
+      return;
+    }
+    
+    _blockTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      final now = DateTime.now();
+      final diff = blockedUntil.difference(now).inSeconds;
+      setState(() {
+        _blockRemainingSeconds = diff > 0 ? diff : 0;
+      });
+      
+      // Poll check_unblock_status every 30 seconds or when timer hits zero
+      if (timer.tick % 30 == 0 || diff <= 0) {
+        _chatProvider?.checkUnblockStatus(_activePersona.id);
+        if (diff <= 0) {
+          _stopBlockTimer();
+        }
+      }
+    });
+  }
+
+  void _stopBlockTimer() {
+    _blockTimer?.cancel();
+    _blockTimer = null;
+  }
+
+  void _onWaitPressed(ChatProvider provider) async {
+    final blockedUntil = provider.getBlockedUntil(_activePersona.id);
+    if (blockedUntil != null) {
+      await NotificationService().scheduleUnblockNotification(
+        id: _activePersona.id,
+        title: "Chat Available",
+        body: "${_activePersona.name} is ready to chat again!",
+        scheduledDate: blockedUntil,
+      );
+    }
+    if (mounted) {
+      Navigator.pop(context);
+    }
+  }
+
+  void _onStartFreshPressed(ChatProvider provider) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+      await provider.startFreshSession(_activePersona.id);
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        _stopBlockTimer();
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to start fresh session: $e')),
+        );
+      }
+    }
+  }
+
+  String _formatBlockDuration(int totalSeconds) {
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    
+    if (hours > 0) {
+      return "${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
+    } else {
+      return "${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
+    }
+  }
+
+  Widget _buildBlockedCard(ThemeData theme, ChatProvider provider) {
+    final reason = provider.getBlockReason(_activePersona.id);
+    final blockedUntil = provider.getBlockedUntil(_activePersona.id);
+    
+    String message = "${_activePersona.name} is currently unavailable.";
+    if (reason == "arousal_threshold") {
+      message = "${_activePersona.name} has left the heated argument";
+    } else if (reason == "repeated_content_violations") {
+      message = "${_activePersona.name} wants respectful conversation.";
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          top: BorderSide(color: theme.colorScheme.error.withOpacity(0.3), width: 1.5),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Warning Icon
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.error.withOpacity(0.08),
+                shape: BoxShape.circle,
+                border: Border.all(color: theme.colorScheme.error.withOpacity(0.2)),
+              ),
+              child: Icon(Icons.warning_amber_rounded, size: 32, color: theme.colorScheme.error),
+            ),
+            const SizedBox(height: 16),
+            
+            // Block Message
+            Text(
+              message,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            
+            // Timer
+            if (blockedUntil != null && _blockRemainingSeconds > 0) ...[
+              Text(
+                "Cool down time remaining: ${_formatBlockDuration(_blockRemainingSeconds)}",
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  fontFamily: 'Courier',
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+            
+            // Action Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _onWaitPressed(provider),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Colors.white30, width: 1.5),
+                      minimumSize: const Size(0, 48),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Wait', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _onStartFreshPressed(provider),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: Colors.black,
+                      minimumSize: const Size(0, 48),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                    ),
+                    child: const Text('Start Fresh', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -40,6 +40,7 @@ class Message {
   final DateTime timestamp;
   final String? imageFileName;
   final bool isUser;
+  final int? personaSessionId;
 
   Message({
     required this.id,
@@ -49,6 +50,7 @@ class Message {
     required this.timestamp,
     this.imageFileName,
     this.isUser = false,
+    this.personaSessionId,
   });
 
   factory Message.fromJson(Map<String, dynamic> json, int currentUserId) {
@@ -61,6 +63,11 @@ class Message {
     final parsedReceiverId = json['receiver_id'] is int 
         ? json['receiver_id'] as int 
         : (int.tryParse(json['receiver_id']?.toString() ?? '') ?? 0);
+    final parsedPersonaSessionId = json['persona_session_id'] is int
+        ? json['persona_session_id'] as int
+        : (json['persona_session_id'] != null
+            ? int.tryParse(json['persona_session_id'].toString())
+            : null);
     return Message(
       id: parsedId,
       senderId: parsedSenderId,
@@ -71,6 +78,7 @@ class Message {
           : DateTime.now(),
       imageFileName: json['image_object_name']?.toString(),
       isUser: parsedSenderId == currentUserId,
+      personaSessionId: parsedPersonaSessionId,
     );
   }
 

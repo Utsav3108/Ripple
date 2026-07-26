@@ -43,6 +43,11 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
   String? _errorMessage;
   int? _activePersonaId;
 
+  // Track mapped persona sessions and block states
+  final Map<int, int> _sessionToPersonaMap = {};
+  final Map<int, String> _blockReasons = {};
+  final Map<int, DateTime> _blockedUntilMap = {};
+
   bool _hasMoreMessages = false;
   bool _isFetchingOlderMessages = false;
   int _currentMessagePage = 1;
@@ -138,6 +143,9 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
       if (_currentUserId == null) return;
       final newMessage = Message.fromJson(data, _currentUserId!);
       
+      // Update session mapping
+      _updateSessionMapping(newMessage);
+      
       bool isRelevant = false;
       if (_currentChallengeSessionId != null) {
         // In challenge mode, check if challenge session matches
@@ -162,7 +170,41 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
         }
       }
     };
+
+    _socketManager.onPersonaBlocked = (data) async {
+      print('ChatProvider: Received persona_blocked event: $data');
+      final sessionId = data['persona_session_id'] as int?;
+      final reason = data['block_reason'] as String? ?? 'arousal_threshold';
+      final untilStr = data['blocked_until'] as String?;
+      
+      if (sessionId != null && untilStr != null && _currentUserId != null) {
+        final personaId = _sessionToPersonaMap[sessionId];
+        if (personaId != null) {
+          final until = DateTime.parse(untilStr);
+          _blockReasons[personaId] = reason;
+          _blockedUntilMap[personaId] = until;
+          await _saveBlockState(_currentUserId!, personaId, reason, until);
+          notifyListeners();
+        }
+      }
+    };
+
+    _socketManager.onPersonaUnblocked = (data) async {
+      print('ChatProvider: Received persona_unblocked event: $data');
+      final sessionId = data['persona_session_id'] as int?;
+      if (sessionId != null && _currentUserId != null) {
+        final personaId = _sessionToPersonaMap[sessionId];
+        if (personaId != null) {
+          _blockReasons.remove(personaId);
+          _blockedUntilMap.remove(personaId);
+          await _clearBlockState(_currentUserId!, personaId);
+          notifyListeners();
+        }
+      }
+    };
+
     _socketManager.onChallengeCompleted = (data) {
+      print('Received challenge_completed event: $data');
       if (onChallengeCompletedEvent != null) {
         onChallengeCompletedEvent!(data);
       }
@@ -404,6 +446,7 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     int? receiverId,
     int? challengeSessionId,
     int? attemptSessionId,
+    int? personaSessionId,
   }) async {
     try {
       final bodyParams = <String, dynamic>{
@@ -414,6 +457,7 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
       if (receiverId != null) bodyParams['receiver_id'] = receiverId;
       if (challengeSessionId != null) bodyParams['challenge_session_id'] = challengeSessionId;
       if (attemptSessionId != null) bodyParams['attempt_session_id'] = attemptSessionId;
+      if (personaSessionId != null) bodyParams['persona_session_id'] = personaSessionId;
 
       final request = Request(
         url: '/conversations',
@@ -460,17 +504,34 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     notifyListeners();
 
     try {
-      final result = await fetchConversationPage(
-        page: 1,
-        pageSize: 10,
-        senderId: _currentUserId!,
-        receiverId: receiverId,
-      );
+      final prefs = await SharedPreferences.getInstance();
+      final sessionId = prefs.getInt('persona_session_${_currentUserId}_$receiverId');
+
+      PaginatedMessages? result;
+      if (sessionId != null) {
+        result = await fetchConversationPage(
+          page: 1,
+          pageSize: 10,
+          personaSessionId: sessionId,
+        );
+      } else {
+        result = await fetchConversationPage(
+          page: 1,
+          pageSize: 10,
+          senderId: _currentUserId!,
+          receiverId: receiverId,
+        );
+      }
 
       if (result != null) {
         _messages = result.messages;
         _hasMoreMessages = result.hasMore;
         _totalMessagePages = result.totalPages;
+
+        // Capture session mappings from loaded messages
+        for (final msg in _messages) {
+          _updateSessionMapping(msg);
+        }
       }
     } catch (e) {
       print("Error fetching messages: $e");
@@ -495,18 +556,33 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
         challengeSessionId: _currentChallengeSessionId,
       );
     } else if (_activePersonaId != null) {
-      result = await fetchConversationPage(
-        page: nextPage,
-        pageSize: 10,
-        senderId: _currentUserId!,
-        receiverId: _activePersonaId,
-      );
+      final prefs = await SharedPreferences.getInstance();
+      final sessionId = prefs.getInt('persona_session_${_currentUserId}_$_activePersonaId');
+      if (sessionId != null) {
+        result = await fetchConversationPage(
+          page: nextPage,
+          pageSize: 10,
+          personaSessionId: sessionId,
+        );
+      } else {
+        result = await fetchConversationPage(
+          page: nextPage,
+          pageSize: 10,
+          senderId: _currentUserId!,
+          receiverId: _activePersonaId,
+        );
+      }
     }
 
     if (result != null) {
       _messages.insertAll(0, result.messages); // Prepend older messages
       _currentMessagePage = nextPage;
       _hasMoreMessages = result.hasMore;
+
+      // Capture session mappings from loaded messages
+      for (final msg in result.messages) {
+        _updateSessionMapping(msg);
+      }
     }
     
     _isFetchingOlderMessages = false;
@@ -637,6 +713,9 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
         // Connect Socket
         _socketManager.connect(_currentUserId!);
         
+        // Load sessions and blocks
+        await _loadAllPersonaSessionsAndBlocks(_currentUserId!);
+        
         // Fetch data
         await fetchChattedPersonas();
         await fetchChallenges();
@@ -736,6 +815,7 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
         
         // Connect Socket
         _socketManager.connect(_currentUserId!);
+        await _loadAllPersonaSessionsAndBlocks(_currentUserId!);
         
         // Fetch data
         await fetchChattedPersonas();
@@ -760,6 +840,9 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     _chats = [];
     _challenges = [];
     _messages = [];
+    _sessionToPersonaMap.clear();
+    _blockReasons.clear();
+    _blockedUntilMap.clear();
     _network.clearToken();
     
     // Clear token from SharedPreferences
@@ -1170,6 +1253,123 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
       AnalyticsManager().endSession();
     } else if (state == AppLifecycleState.resumed) {
       AnalyticsManager().startSession();
+    }
+  }
+
+  void _updateSessionMapping(Message message) {
+    if (message.personaSessionId != null && _currentUserId != null) {
+      final personaId = message.isUser ? message.receiverId : message.senderId;
+      _savePersonaSessionId(_currentUserId!, personaId, message.personaSessionId!);
+    }
+  }
+
+  Future<void> _savePersonaSessionId(int userId, int personaId, int sessionId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('persona_session_${userId}_$personaId', sessionId);
+    _sessionToPersonaMap[sessionId] = personaId;
+  }
+
+  Future<void> _saveBlockState(int userId, int personaId, String reason, DateTime until) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('persona_block_reason_${userId}_$personaId', reason);
+    await prefs.setString('persona_blocked_until_${userId}_$personaId', until.toIso8601String());
+  }
+
+  Future<void> _clearBlockState(int userId, int personaId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('persona_block_reason_${userId}_$personaId');
+    await prefs.remove('persona_blocked_until_${userId}_$personaId');
+  }
+
+  Future<void> _loadAllPersonaSessionsAndBlocks(int userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys();
+    
+    // Load session mappings
+    final sessionPrefix = 'persona_session_${userId}_';
+    for (final key in keys) {
+      if (key.startsWith(sessionPrefix)) {
+        final personaIdStr = key.substring(sessionPrefix.length);
+        final personaId = int.tryParse(personaIdStr);
+        final sessionId = prefs.getInt(key);
+        if (personaId != null && sessionId != null) {
+          _sessionToPersonaMap[sessionId] = personaId;
+        }
+      }
+    }
+    
+    // Load block states
+    final blockReasonPrefix = 'persona_block_reason_${userId}_';
+    for (final key in keys) {
+      if (key.startsWith(blockReasonPrefix)) {
+        final personaIdStr = key.substring(blockReasonPrefix.length);
+        final personaId = int.tryParse(personaIdStr);
+        if (personaId != null) {
+          final reason = prefs.getString(key);
+          final untilStr = prefs.getString('persona_blocked_until_${userId}_$personaId');
+          if (reason != null && untilStr != null) {
+            final until = DateTime.tryParse(untilStr);
+            if (until != null) {
+              _blockReasons[personaId] = reason;
+              _blockedUntilMap[personaId] = until;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  String? getBlockReason(int personaId) {
+    return _blockReasons[personaId];
+  }
+
+  DateTime? getBlockedUntil(int personaId) {
+    return _blockedUntilMap[personaId];
+  }
+
+  bool isPersonaBlocked(int personaId) {
+    return _blockedUntilMap.containsKey(personaId);
+  }
+
+  void checkUnblockStatus(int personaId) {
+    if (_currentUserId == null) return;
+    _socketManager.emitCheckUnblockStatus(_currentUserId!, personaId);
+  }
+
+  Future<void> startFreshSession(int personaId) async {
+    if (_currentUserId == null) return;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final request = Request(
+        url: '/persona-sessions/new',
+        method: HTTPMethod.POST,
+        body: {
+          'persona_id': personaId,
+        },
+      );
+      final response = await _network.performRequest(request);
+      if (response.data is Map) {
+        final data = Map<String, dynamic>.from(response.data as Map);
+        final newSessionId = data['persona_session_id'] as int;
+        
+        // Update local session storage
+        await _savePersonaSessionId(_currentUserId!, personaId, newSessionId);
+        
+        // Clear block state
+        _blockReasons.remove(personaId);
+        _blockedUntilMap.remove(personaId);
+        await _clearBlockState(_currentUserId!, personaId);
+        
+        // Reload messages for the fresh conversation
+        await fetchMessages(personaId);
+      }
+    } catch (e) {
+      print("Error starting fresh session: $e");
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
