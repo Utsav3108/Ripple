@@ -81,7 +81,7 @@ class _PersonaDetailsScreenState extends State<PersonaDetailsScreen> {
 
     // Fetch Chats (Page 1)
     try {
-      final chatsData = await provider.fetchPersonaChats(widget.persona.id, page: 1, limit: 10);
+      final chatsData = await provider.fetchPersonaChats(widget.persona.id, page: 1, limit: 100);
       setState(() {
         _chats.addAll(chatsData.chats);
         _hasMoreChats = chatsData.hasMore;
@@ -106,7 +106,7 @@ class _PersonaDetailsScreenState extends State<PersonaDetailsScreen> {
     final nextPage = _currentChatsPage + 1;
 
     try {
-      final chatsData = await provider.fetchPersonaChats(widget.persona.id, page: nextPage, limit: 10);
+      final chatsData = await provider.fetchPersonaChats(widget.persona.id, page: nextPage, limit: 100);
       setState(() {
         _chats.addAll(chatsData.chats);
         _currentChatsPage = nextPage;
@@ -635,6 +635,14 @@ class _PersonaDetailsScreenState extends State<PersonaDetailsScreen> {
 
     final cardColor = theme.colorScheme.surface;
     
+    // Sort currently loaded chats in memory by personaSessionId to assign creation indices
+    final sortedChats = List<PersonaChatSession>.from(_chats);
+    sortedChats.sort((a, b) => a.personaSessionId.compareTo(b.personaSessionId));
+    final Map<int, int> creationIndices = {};
+    for (int i = 0; i < sortedChats.length; i++) {
+      creationIndices[sortedChats[i].personaSessionId] = i + 1;
+    }
+
     // Resolve currently loaded session ID to check if it matches the recent active session
     final activeSessionId = widget.currentSessionId ?? context.read<ChatProvider>().getActiveSessionId(widget.persona.id);
     final showRecentSection = recentSession != null && recentSession.personaSessionId != activeSessionId;
@@ -681,7 +689,7 @@ class _PersonaDetailsScreenState extends State<PersonaDetailsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            "Conversation #${recentSession!.personaSessionId}",
+                            "Conversation #${creationIndices[recentSession!.personaSessionId] ?? recentSession.personaSessionId}",
                             style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 4),
@@ -720,7 +728,8 @@ class _PersonaDetailsScreenState extends State<PersonaDetailsScreen> {
                 final session = previousChats[index];
                 final isSessionBlocked = session.status == "blocked";
                 
-                final title = "Conversation #${session.personaSessionId}";
+                final sessionIndex = creationIndices[session.personaSessionId] ?? session.personaSessionId;
+                final title = "Conversation #$sessionIndex";
 
                 return InkWell(
                   onTap: () {
