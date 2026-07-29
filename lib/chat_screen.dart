@@ -7,17 +7,20 @@ import 'Model/narration_parser.dart';
 import 'Provider/chat_provider.dart';
 import 'Services/analytics_manager.dart';
 import 'Services/notification_service.dart';
+import 'persona_details_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final Persona persona;
   final Challenge? challenge;
   final int? attemptSessionId;
+  final int? personaSessionId;
 
   const ChatScreen({
     super.key,
     required this.persona,
     this.challenge,
     this.attemptSessionId,
+    this.personaSessionId,
   });
 
   @override
@@ -38,6 +41,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   late Challenge? _activeChallenge;
   late Persona _activePersona;
+  int? _currentPersonaSessionId;
   bool _skipNarrationForReplay = false;
   bool _showChallengeSelectionOverlay = false;
   bool _showPersonaSelectionOverlay = false;
@@ -66,6 +70,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _scrollController.addListener(_onScroll);
     _activeChallenge = widget.challenge;
     _activePersona = widget.persona;
+    _currentPersonaSessionId = widget.personaSessionId;
     _chatProvider = context.read<ChatProvider>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeChat();
@@ -310,7 +315,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     } else {
       provider.clearChallengeSession();
-      await provider.fetchMessages(_activePersona.id);
+      await provider.fetchMessages(_activePersona.id, personaSessionId: _currentPersonaSessionId);
     }
   }
 
@@ -733,6 +738,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final isChallengeMode = _activeChallenge != null;
     final provider = context.watch<ChatProvider>();
     final isBlocked = provider.isPersonaBlocked(_activePersona.id);
+    final isActive = _currentPersonaSessionId == null || _currentPersonaSessionId == provider.getActiveSessionId(_activePersona.id);
     
     if (isBlocked && _blockTimer == null) {
       final blockedUntil = provider.getBlockedUntil(_activePersona.id);
@@ -786,52 +792,72 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       },
       child: Scaffold(
         appBar: AppBar(
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: theme.colorScheme.surface,
-              backgroundImage: !isBlocked && _activePersona.imageUrl != null && _activePersona.imageUrl!.isNotEmpty
-                  ? CachedNetworkImageProvider(_activePersona.imageUrl!)
-                  : null,
-              onBackgroundImageError: !isBlocked && _activePersona.imageUrl != null && _activePersona.imageUrl!.isNotEmpty
-                  ? (exception, stackTrace) {
-                      print("Exception caught while fetching image for ${_activePersona.name}: $exception");
-                    }
-                  : null,
-              child: isBlocked
-                  ? const Icon(Icons.person, size: 20, color: Colors.white54)
-                  : (_activePersona.imageUrl == null || _activePersona.imageUrl!.isEmpty
-                      ? Text(_activePersona.name[0], style: const TextStyle(fontSize: 14))
-                      : null),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    _activePersona.name,
-                    style: theme.appBarTheme.titleTextStyle?.copyWith(fontSize: 16),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (isChallengeMode)
-                    Text(
-                      widget.attemptSessionId != null 
-                          ? 'Challenge History (Read Only)'
-                          : 'Strategy Challenge Active',
-                      style: TextStyle(
-                        color: widget.attemptSessionId != null ? Colors.white38 : accentColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                ],
+        title: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () async {
+            final resultSessionId = await Navigator.push<int?>(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PersonaDetailsScreen(
+                  persona: _activePersona,
+                  currentSessionId: _currentPersonaSessionId,
+                ),
               ),
-            ),
-          ],
+            );
+            if (resultSessionId != null && mounted) {
+              setState(() {
+                _currentPersonaSessionId = resultSessionId;
+              });
+              _initializeChat();
+            }
+          },
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: theme.colorScheme.surface,
+                backgroundImage: !isBlocked && _activePersona.imageUrl != null && _activePersona.imageUrl!.isNotEmpty
+                    ? CachedNetworkImageProvider(_activePersona.imageUrl!)
+                    : null,
+                onBackgroundImageError: !isBlocked && _activePersona.imageUrl != null && _activePersona.imageUrl!.isNotEmpty
+                    ? (exception, stackTrace) {
+                        print("Exception caught while fetching image for ${_activePersona.name}: $exception");
+                      }
+                    : null,
+                child: isBlocked
+                    ? const Icon(Icons.person, size: 20, color: Colors.white54)
+                    : (_activePersona.imageUrl == null || _activePersona.imageUrl!.isEmpty
+                        ? Text(_activePersona.name[0], style: const TextStyle(fontSize: 14))
+                        : null),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _activePersona.name,
+                      style: theme.appBarTheme.titleTextStyle?.copyWith(fontSize: 16),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (isChallengeMode)
+                      Text(
+                        widget.attemptSessionId != null 
+                            ? 'Challenge History (Read Only)'
+                            : 'Strategy Challenge Active',
+                        style: TextStyle(
+                          color: widget.attemptSessionId != null ? Colors.white38 : accentColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           if (isChallengeMode && !_isSettingUpChallenge && widget.attemptSessionId == null && _hasTimer)
@@ -960,8 +986,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       ),
                     ),
                     if (widget.attemptSessionId != null)
-                      _buildReadOnlyResultBanner(theme, context.watch<ChatProvider>().currentChallengeStatus)
-                    else if (isBlocked)
+                      _buildReadOnlyResultBanner(theme, context.watch<ChatProvider>().currentChallengeStatus),
+                    if (isBlocked)
                       _buildBlockedCard(theme, provider)
                     else
                       Container(
@@ -1868,6 +1894,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (mounted) {
         Navigator.pop(context); // Close loading dialog
         _stopBlockTimer();
+        setState(() {
+          _currentPersonaSessionId = provider.getActiveSessionId(_activePersona.id);
+        });
       }
     } catch (e) {
       if (mounted) {

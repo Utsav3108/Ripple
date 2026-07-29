@@ -42,9 +42,11 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
   bool _isChallengesLoading = false;
   String? _errorMessage;
   int? _activePersonaId;
+  int? _currentLoadedSessionId;
 
   // Track mapped persona sessions and block states
   final Map<int, int> _sessionToPersonaMap = {};
+  final Map<int, int> _personaActiveSessionId = {};
   final Map<int, String> _blockReasons = {};
   final Map<int, DateTime> _blockedUntilMap = {};
 
@@ -479,7 +481,7 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     return null;
   }
 
-  Future<void> fetchMessages(int receiverId) async {
+  Future<void> fetchMessages(int receiverId, {int? personaSessionId}) async {
     _activePersonaId = receiverId;
     
     // Track play_persona event
@@ -504,8 +506,12 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     notifyListeners();
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final sessionId = prefs.getInt('persona_session_${_currentUserId}_$receiverId');
+      int? sessionId = personaSessionId;
+      if (sessionId == null) {
+        final prefs = await SharedPreferences.getInstance();
+        sessionId = prefs.getInt('persona_session_${_currentUserId}_$receiverId');
+      }
+      _currentLoadedSessionId = sessionId;
 
       PaginatedMessages? result;
       if (sessionId != null) {
@@ -556,13 +562,11 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
         challengeSessionId: _currentChallengeSessionId,
       );
     } else if (_activePersonaId != null) {
-      final prefs = await SharedPreferences.getInstance();
-      final sessionId = prefs.getInt('persona_session_${_currentUserId}_$_activePersonaId');
-      if (sessionId != null) {
+      if (_currentLoadedSessionId != null) {
         result = await fetchConversationPage(
           page: nextPage,
           pageSize: 10,
-          personaSessionId: sessionId,
+          personaSessionId: _currentLoadedSessionId,
         );
       } else {
         result = await fetchConversationPage(
@@ -587,6 +591,34 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     
     _isFetchingOlderMessages = false;
     notifyListeners();
+  }
+
+  Future<PersonaDetails> fetchPersonaDetails(int personaId) async {
+    final request = Request(
+      url: '/personas/$personaId/details',
+      method: HTTPMethod.GET,
+    );
+    final response = await _network.performRequest(request);
+    if (response.data is Map) {
+      return PersonaDetails.fromJson(Map<String, dynamic>.from(response.data as Map));
+    }
+    throw Exception('Failed to load persona details');
+  }
+
+  Future<PaginatedPersonaChats> fetchPersonaChats(int personaId, {int page = 1, int limit = 20}) async {
+    final request = Request(
+      url: '/personas/$personaId/chats',
+      method: HTTPMethod.GET,
+      body: {
+        'page': page,
+        'limit': limit,
+      },
+    );
+    final response = await _network.performRequest(request);
+    if (response.data is Map) {
+      return PaginatedPersonaChats.fromJson(Map<String, dynamic>.from(response.data as Map));
+    }
+    throw Exception('Failed to load persona chats');
   }
 
   Future<void> fetchAllPersonas() async {
@@ -841,6 +873,8 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     _challenges = [];
     _messages = [];
     _sessionToPersonaMap.clear();
+    _personaActiveSessionId.clear();
+    _currentLoadedSessionId = null;
     _blockReasons.clear();
     _blockedUntilMap.clear();
     _network.clearToken();
@@ -1267,6 +1301,7 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('persona_session_${userId}_$personaId', sessionId);
     _sessionToPersonaMap[sessionId] = personaId;
+    _personaActiveSessionId[personaId] = sessionId;
   }
 
   Future<void> _saveBlockState(int userId, int personaId, String reason, DateTime until) async {
@@ -1294,6 +1329,7 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
         final sessionId = prefs.getInt(key);
         if (personaId != null && sessionId != null) {
           _sessionToPersonaMap[sessionId] = personaId;
+          _personaActiveSessionId[personaId] = sessionId;
         }
       }
     }
@@ -1329,6 +1365,10 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
 
   bool isPersonaBlocked(int personaId) {
     return _blockedUntilMap.containsKey(personaId);
+  }
+
+  int? getActiveSessionId(int personaId) {
+    return _personaActiveSessionId[personaId];
   }
 
   void checkUnblockStatus(int personaId) {

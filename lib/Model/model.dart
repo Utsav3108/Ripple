@@ -366,3 +366,103 @@ class PaginatedMessages {
     );
   }
 }
+
+class PersonaDetails {
+  final String name;
+  final String desc;
+  final String category;
+  final List<String>? expertise;
+  final LikesDislikes? likesDislikes;
+
+  PersonaDetails({
+    required this.name,
+    required this.desc,
+    required this.category,
+    this.expertise,
+    this.likesDislikes,
+  });
+
+  factory PersonaDetails.fromJson(Map<String, dynamic> json) {
+    return PersonaDetails(
+      name: json['name']?.toString() ?? '',
+      desc: json['desc']?.toString() ?? '',
+      category: json['category']?.toString() ?? '',
+      expertise: json['expertise'] != null
+          ? List<String>.from(json['expertise'] as List)
+          : null,
+      likesDislikes: json['likes_dislikes'] != null
+          ? LikesDislikes.fromJson(Map<String, dynamic>.from(json['likes_dislikes'] as Map))
+          : null,
+    );
+  }
+}
+
+class LikesDislikes {
+  final List<String> likes;
+  final List<String> dislikes;
+
+  LikesDislikes({required this.likes, required this.dislikes});
+
+  factory LikesDislikes.fromJson(Map<String, dynamic> json) {
+    return LikesDislikes(
+      likes: json['likes'] != null ? List<String>.from(json['likes'] as List) : [],
+      dislikes: json['dislikes'] != null ? List<String>.from(json['dislikes'] as List) : [],
+    );
+  }
+}
+
+class PersonaChatSession {
+  final int personaSessionId;
+  final String status;
+  final DateTime lastUpdatedAt;
+
+  PersonaChatSession({
+    required this.personaSessionId,
+    required this.status,
+    required this.lastUpdatedAt,
+  });
+
+  factory PersonaChatSession.fromJson(Map<String, dynamic> json) {
+    return PersonaChatSession(
+      personaSessionId: json['persona_session_id'] is int
+          ? json['persona_session_id'] as int
+          : (int.tryParse(json['persona_session_id']?.toString() ?? '') ?? 0),
+      status: json['status']?.toString() ?? 'active',
+      lastUpdatedAt: json['last_updated_at'] != null
+          ? DateTime.parse(json['last_updated_at'])
+          : DateTime.now(),
+    );
+  }
+}
+
+class PaginatedPersonaChats {
+  final List<PersonaChatSession> chats;
+  final int page;
+  final int limit;
+  final int totalCount;
+  final int totalPages;
+  final bool hasMore;
+
+  PaginatedPersonaChats({
+    required this.chats,
+    required this.page,
+    required this.limit,
+    required this.totalCount,
+    required this.totalPages,
+    required this.hasMore,
+  });
+
+  factory PaginatedPersonaChats.fromJson(Map<String, dynamic> json) {
+    final rawChats = json['chats'] as List? ?? [];
+    return PaginatedPersonaChats(
+      chats: rawChats
+          .map((c) => PersonaChatSession.fromJson(Map<String, dynamic>.from(c as Map)))
+          .toList(),
+      page: json['page'] is int ? json['page'] as int : 1,
+      limit: json['limit'] is int ? json['limit'] as int : 20,
+      totalCount: json['total_count'] is int ? json['total_count'] as int : 0,
+      totalPages: json['total_pages'] is int ? json['total_pages'] as int : 1,
+      hasMore: json['has_more'] is bool ? json['has_more'] as bool : false,
+    );
+  }
+}

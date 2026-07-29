@@ -85,7 +85,52 @@ The token is verified securely against Google's OAuth2 APIs. Upon validation:
 
 ---
 
-### 6. Create New Persona Session (Protected)
+### 6. Get Persona Details (Protected)
+- **GET /personas/{persona_id}/details**
+- **Description:** Static profile info for a persona details page — no emotional/session state. AI personas only.
+- **Path Parameter:**
+  - `persona_id` (int): The AI persona to fetch.
+- **Response:**
+  - `200 OK`: [Persona Details Object](#persona-details-object).
+  - `404 Not Found`: If `persona_id` doesn't exist, or resolves to a human persona.
+
+#### Persona Details Object
+- `name` (string)
+- `desc` (string)
+- `expertise` (list of string, optional): `null` if the persona's `traits` isn't a structured object (legacy free-text traits).
+- `category` (string)
+- `likes_dislikes` (object, optional): `{ "likes": [string], "dislikes": [string] }`, `null` under the same legacy-traits condition as `expertise`.
+
+---
+
+### 7. Get Persona Chats List (Protected)
+- **GET /personas/{persona_id}/chats**
+- **Description:** Every chat (session/fork) the authenticated user has ever had with this persona, including blocked ones, each tagged with a status. No message previews — list only.
+- **Path Parameter:**
+  - `persona_id` (int): The AI persona. Chats are always scoped to `current_user.id` as the human side of the pair — there is no way to list another user's chats.
+- **Query Parameters:**
+  - `page` (int, optional, default=1, min=1)
+  - `limit` (int, optional, default=20, min=1, max=100)
+- **Response:**
+  - `200 OK`: [Persona Chats Response Object](#persona-chats-response-object).
+  - `404 Not Found`: If `persona_id` doesn't exist, or resolves to a human persona.
+
+#### Persona Chats Response Object
+- `chats` (array of [Persona Chat Objects](#persona-chat-object))
+- `page` (int)
+- `limit` (int)
+- `total_count` (int)
+- `total_pages` (int)
+- `has_more` (bool)
+
+#### Persona Chat Object
+- `persona_session_id` (int)
+- `status` (string: `"recent"`, `"active"`, or `"blocked"`): Exactly one chat across all of the user's sessions with this persona is `"recent"` — the one with the latest `last_updated_at`, even if that session is also currently blocked (recent overrides blocked). Every other session is `"blocked"` if currently blocked, otherwise `"active"`.
+- `last_updated_at` (string, datetime)
+
+---
+
+### 8. Create New Persona Session (Protected)
 - **POST /persona-sessions/new**
 - **Description:** Explicitly starts a brand-new persona session (fork) with baseline emotional state for the given persona, ignoring any existing fork for the pair — including a currently-blocked one. Not needed for normal chat: `send_message` (Socket.IO) already creates a session lazily on a pair's first-ever message. Use this only for an explicit user-initiated fresh start, e.g. after receiving a `persona_blocked` Socket.IO event and the user chooses to start over rather than wait for `check_unblock_status` to clear. See `/docs/socketio_server_events.md` for the block/unblock event flow.
 - **Request Body:**
@@ -95,7 +140,7 @@ The token is verified securely against Google's OAuth2 APIs. Upon validation:
 
 ---
 
-### 7. Get Messages Between Users (Protected)
+### 9. Get Messages Between Users (Protected)
 - **GET /messages**
 - **Description:** Retrieve chat history between the current user and another persona.
 - **Query Parameters:**
@@ -118,14 +163,14 @@ The token is verified securely against Google's OAuth2 APIs. Upon validation:
 
 ---
 
-### 8. Get Conversations (Paginated) (Protected)
+### 10. Get Conversations (Paginated) (Protected)
 - **GET /conversations**
 - **Description:** Paginated message history. Exactly one of the four discriminators below must be provided; the endpoint returns `422 Unprocessable Entity` if none is given. Ordered chronologically (oldest first within the page).
 - **Query Parameters:**
   - `page` (int, optional, default=1, min=1): Page number, 1-indexed.
   - `page_size` (int, optional, default=10, min=1, max=100): Messages per page.
   - `sender_id` + `receiver_id` (int, both required together): All regular persona-chat messages between this pair, across every `persona_session_id` fork mixed together. `current_user.id` must be one of the two, or `403 Forbidden`.
-  - `persona_session_id` (int): Messages for one specific fork of a persona chat only — use this instead of `sender_id`/`receiver_id` to see just the active (or a specific past) session's history, e.g. after starting a fresh session via `POST /persona-sessions/new` (endpoint 6). Scoped to the requesting user automatically (must be sender or receiver on the matching rows); a non-participant querying another user's `persona_session_id` gets an empty page back, not an error.
+  - `persona_session_id` (int): Messages for one specific fork of a persona chat only — use this instead of `sender_id`/`receiver_id` to see just the active (or a specific past) session's history, e.g. after starting a fresh session via `POST /persona-sessions/new` (endpoint 8). Scoped to the requesting user automatically (must be sender or receiver on the matching rows); a non-participant querying another user's `persona_session_id` gets an empty page back, not an error.
   - `challenge_session_id` (int): Messages for an ongoing challenge session.
   - `attempt_session_id` (int): Messages for a past completed challenge attempt (same underlying lookup as `challenge_session_id`).
 - **Response:**
@@ -143,7 +188,7 @@ The token is verified securely against Google's OAuth2 APIs. Upon validation:
 
 ---
 
-### 9. Get All Challenges (Protected)
+### 11. Get All Challenges (Protected)
 - **GET /challenges**
 - **Description:** Get a list of all active challenges, each with its associated configuration and story context.
 - **Response:**
@@ -176,7 +221,7 @@ The token is verified securely against Google's OAuth2 APIs. Upon validation:
 
 ---
 
-### 10. Create or Update Challenge (Protected)
+### 12. Create or Update Challenge (Protected)
 - **POST /challenges**
 - **Description:** Create a new challenge configuration or update an existing one.
 - **Request Body:** ChallengeCreate object
@@ -185,7 +230,7 @@ The token is verified securely against Google's OAuth2 APIs. Upon validation:
 
 ---
 
-### 11. Setup Challenge (Protected)
+### 13. Setup Challenge (Protected)
 - **POST /setup_challenge**
 - **Description:** Start or resume a challenge session with a selected AI persona. If a session is active, returns the existing context; otherwise, assigns the persona and generates the starting storyline.
 - **Request Body:**
@@ -207,7 +252,7 @@ The token is verified securely against Google's OAuth2 APIs. Upon validation:
 
 ---
 
-### 12. Get Challenge Attempts (Protected)
+### 14. Get Challenge Attempts (Protected)
 - **GET /challenge-attempts/{challenge_id}**
 - **Description:** Get the attempt history of the **currently authenticated user** for the specified challenge. Attempts by other users are excluded.
 - **Path Parameter:**
