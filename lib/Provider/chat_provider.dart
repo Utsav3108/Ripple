@@ -1052,7 +1052,7 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     notifyListeners();
   }
 
-  void sendMessage(int receiverId, String text) {
+  void sendMessage(int receiverId, String text, {int? personaSessionId}) {
     if (text.trim().isEmpty) return;
 
     // Optimistically add to list
@@ -1074,6 +1074,7 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
       receiverId,
       text,
       challengeSessionId: _currentChallengeSessionId,
+      personaSessionId: personaSessionId,
     );
   }
 
@@ -1259,12 +1260,13 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     }
   }
 
-  void leaveChat(int userId, {int? personaId, int? challengeSessionId}) {
-    print("DEBUG: ChatProvider.leaveChat called for user $userId, persona $personaId, session $challengeSessionId");
+  void leaveChat(int userId, {int? personaId, int? challengeSessionId, int? personaSessionId}) {
+    print("DEBUG: ChatProvider.leaveChat called for user $userId, persona $personaId, session $challengeSessionId, personaSessionId $personaSessionId");
     _socketManager.emitLeaveChat(
       userId,
       personaId: personaId,
       challengeSessionId: challengeSessionId,
+      personaSessionId: personaSessionId,
     );
   }
 
@@ -1371,9 +1373,9 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     return _personaActiveSessionId[personaId];
   }
 
-  void checkUnblockStatus(int personaId) {
+  void checkUnblockStatus(int personaId, {int? personaSessionId}) {
     if (_currentUserId == null) return;
-    _socketManager.emitCheckUnblockStatus(_currentUserId!, personaId);
+    _socketManager.emitCheckUnblockStatus(_currentUserId!, personaId, personaSessionId: personaSessionId);
   }
 
   Future<void> startFreshSession(int personaId) async {

@@ -125,12 +125,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final provider = _chatProvider!;
       final currentUserId = provider.currentUserId;
       final personaId = _activePersona.id;
-      final challengeSessionId = provider.currentChallengeSessionId;
       if (currentUserId != null) {
         provider.leaveChat(
           currentUserId,
           personaId: personaId,
-          challengeSessionId: challengeSessionId,
+          challengeSessionId: provider.currentChallengeSessionId,
+          personaSessionId: _currentPersonaSessionId,
         );
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1027,6 +1027,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                       context.read<ChatProvider>().sendMessage(
                                             _activePersona.id,
                                             _messageController.text,
+                                            personaSessionId: _currentPersonaSessionId,
                                           );
                                       _messageController.clear();
                                       _userSentMessageInSession = true;
@@ -1836,7 +1837,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _stopBlockTimer();
     
     // Immediate query when entering blocked state
-    _chatProvider?.checkUnblockStatus(_activePersona.id);
+    _chatProvider?.checkUnblockStatus(_activePersona.id, personaSessionId: _currentPersonaSessionId);
 
     final now = DateTime.now();
     _blockRemainingSeconds = blockedUntil.difference(now).inSeconds;
@@ -1855,7 +1856,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       
       // Poll check_unblock_status every 30 seconds or when timer hits zero
       if (timer.tick % 30 == 0 || diff <= 0) {
-        _chatProvider?.checkUnblockStatus(_activePersona.id);
+        _chatProvider?.checkUnblockStatus(_activePersona.id, personaSessionId: _currentPersonaSessionId);
         if (diff <= 0) {
           _stopBlockTimer();
         }

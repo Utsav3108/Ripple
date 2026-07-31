@@ -116,10 +116,11 @@ class SocketManager {
     socket.onConnectError((err) => print('Connect Error: $err'));
   }
 
-  void emitCheckUnblockStatus(int userId, int personaId) {
+  void emitCheckUnblockStatus(int userId, int personaId, {int? personaSessionId}) {
     socket.emit('check_unblock_status', {
       'user_id': userId,
       'persona_id': personaId,
+      if (personaSessionId != null) 'persona_session_id': personaSessionId,
     });
   }
 
@@ -131,12 +132,13 @@ class SocketManager {
     socket.emit('join_challenge', {'challenge_session_id': challengeSessionId});
   }
 
-  void sendMessage(int senderId, int receiverId, String text, {int? challengeSessionId}) {
+  void sendMessage(int senderId, int receiverId, String text, {int? challengeSessionId, int? personaSessionId}) {
     final payload = {
       "sender_id": senderId,
       "receiver_id": receiverId,
       "text": text,
       if (challengeSessionId != null) "challenge_session_id": challengeSessionId,
+      if (personaSessionId != null) "persona_session_id": personaSessionId,
     };
     socket.emit('send_message', payload);
   }
@@ -150,12 +152,13 @@ class SocketManager {
     socket.emit('complete_challenge', payload);
   }
 
-  void emitLeaveChat(int userId, {int? personaId, int? challengeSessionId}) {
-    print("DEBUG: SocketManager.emitLeaveChat emitting leave_chat event for user $userId, persona $personaId, session $challengeSessionId");
+  void emitLeaveChat(int userId, {int? personaId, int? challengeSessionId, int? personaSessionId}) {
+    print("DEBUG: SocketManager.emitLeaveChat emitting leave_chat event for user $userId, persona $personaId, session $challengeSessionId, personaSessionId $personaSessionId");
     socket.emit('leave_chat', {
       'user_id': userId,
       if (personaId != null) 'persona_id': personaId,
       if (challengeSessionId != null) 'challenge_session_id': challengeSessionId,
+      if (personaSessionId != null) 'persona_session_id': personaSessionId,
     });
   }
 
