@@ -9,6 +9,77 @@ import '../Theme/app_theme.dart';
 import '../chat_screen.dart';
 import '../chat_list_screen.dart';
 
+// Custom reusable premium scale button for tactile feedback
+class _AnimatedScaleButton extends StatefulWidget {
+  final VoidCallback? onPressed;
+  final Widget child;
+  final Color? backgroundColor;
+
+  const _AnimatedScaleButton({
+    required this.onPressed,
+    required this.child,
+    this.backgroundColor,
+  });
+
+  @override
+  State<_AnimatedScaleButton> createState() => _AnimatedScaleButtonState();
+}
+
+class _AnimatedScaleButtonState extends State<_AnimatedScaleButton> {
+  double _scale = 1.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) {
+        if (widget.onPressed != null) {
+          setState(() {
+            _scale = 0.96; // Tactile squeeze
+          });
+        }
+      },
+      onTapUp: (_) {
+        if (widget.onPressed != null) {
+          setState(() {
+            _scale = 1.0;
+          });
+          widget.onPressed!();
+        }
+      },
+      onTapCancel: () {
+        if (widget.onPressed != null) {
+          setState(() {
+            _scale = 1.0;
+          });
+        }
+      },
+      child: AnimatedScale(
+        scale: _scale,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOutCubic,
+        child: SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: ElevatedButton(
+            onPressed: null, // Tap events are captured by parent GestureDetector
+            style: ElevatedButton.styleFrom(
+              backgroundColor: widget.backgroundColor ?? AppTheme.accentColor,
+              foregroundColor: Colors.black,
+              disabledBackgroundColor: widget.backgroundColor ?? AppTheme.accentColor,
+              disabledForegroundColor: Colors.black,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 0,
+            ),
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class OnboardingFlow extends StatefulWidget {
   const OnboardingFlow({super.key});
 
@@ -22,18 +93,18 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   final List<String> _selectedInterests = [];
 
   void _nextPage() {
-    if (_currentPage < 6) {
+    if (_currentPage < 5) {
       _pageController.nextPage(
-        duration: const Duration(milliseconds: 500),
+        duration: const Duration(milliseconds: 550),
         curve: Curves.easeInOutCubic,
       );
     }
   }
 
   void _previousPage() {
-    if (_currentPage > 1) {
+    if (_currentPage > 0) {
       _pageController.previousPage(
-        duration: const Duration(milliseconds: 500),
+        duration: const Duration(milliseconds: 550),
         curve: Curves.easeInOutCubic,
       );
     }
@@ -47,26 +118,24 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       backgroundColor: AppTheme.pureBlack,
       body: Stack(
         children: [
           // Background Gradient Glows
           Positioned(
-            top: -100,
-            right: -100,
+            top: -120,
+            right: -120,
             child: Container(
-              width: 300,
-              height: 300,
+              width: 320,
+              height: 320,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.accentColor.withOpacity(0.03),
-                    blurRadius: 100,
-                    spreadRadius: 50,
+                    color: AppTheme.accentColor.withOpacity(0.04),
+                    blurRadius: 120,
+                    spreadRadius: 60,
                   ),
                 ],
               ),
@@ -76,32 +145,31 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
             bottom: -150,
             left: -150,
             child: Container(
-              width: 400,
-              height: 400,
+              width: 420,
+              height: 420,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.accentColor.withOpacity(0.02),
+                    color: AppTheme.accentColor.withOpacity(0.03),
                     blurRadius: 150,
-                    spreadRadius: 50,
+                    spreadRadius: 60,
                   ),
                 ],
               ),
             ),
           ),
 
-          // Main Pages
+          // Pages (Progress bar removed completely to feel like a journey, not a form)
           PageView(
             controller: _pageController,
-            physics: const NeverScrollableScrollPhysics(), // Managed navigation only
+            physics: const NeverScrollableScrollPhysics(),
             onPageChanged: (page) {
               setState(() {
                 _currentPage = page;
               });
             },
             children: [
-              _SplashPage(onFinished: _nextPage),
               _EmotionalIntroPage(onFinished: _nextPage),
               _PersonaShowcasePage(onFinished: _nextPage, onBack: _previousPage),
               _ChallengeShowcasePage(onFinished: _nextPage, onBack: _previousPage),
@@ -116,7 +184,6 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                       _selectedInterests.add(interest);
                     }
                   });
-                  // Preload personas from backend on selection interaction
                   context.read<ChatProvider>().fetchAllPersonas();
                 },
                 onFinished: _nextPage,
@@ -128,125 +195,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
               ),
             ],
           ),
-
-          // Top Segmented Progress Bar (Visible from Step 2 to Step 6)
-          if (_currentPage > 0 && _currentPage < 6)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 16,
-              left: 24,
-              right: 24,
-              child: Row(
-                children: List.generate(5, (index) {
-                  // Index 0 represents Step 2 (page 1)
-                  final stepIndex = index + 1;
-                  final isActive = stepIndex <= _currentPage;
-                  return Expanded(
-                    child: Container(
-                      height: 3,
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      decoration: BoxDecoration(
-                        color: isActive 
-                            ? AppTheme.accentColor 
-                            : Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  );
-                }),
-              ),
-            ),
         ],
-      ),
-    );
-  }
-}
-
-// ----------------------------------------------------
-// 1. Splash Page
-// ----------------------------------------------------
-class _SplashPage extends StatefulWidget {
-  final VoidCallback onFinished;
-  const _SplashPage({required this.onFinished});
-
-  @override
-  State<_SplashPage> createState() => _SplashPageState();
-}
-
-class _SplashPageState extends State<_SplashPage> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _opacityAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    );
-
-    _scaleAnimation = Tween<double>(begin: 0.85, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
-
-    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.6, curve: Curves.easeIn)),
-    );
-
-    _controller.forward();
-
-    Timer(const Duration(milliseconds: 2800), () {
-      if (mounted) {
-        widget.onFinished();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: FadeTransition(
-        opacity: _opacityAnimation,
-        child: ScaleTransition(
-          scale: _scaleAnimation,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Image.asset(
-                'assets/images/ripple_splash.png',
-                width: 140,
-                height: 140,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  width: 140,
-                  height: 140,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppTheme.accentColor.withOpacity(0.1),
-                  ),
-                  child: Center(
-                    child: Icon(Icons.waves, size: 64, color: AppTheme.accentColor),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'RIPPLE',
-                style: GoogleFonts.outfit(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 6.0,
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -280,10 +229,9 @@ class _EmotionalIntroPageState extends State<_EmotionalIntroPage> with SingleTic
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 4000),
+      duration: const Duration(milliseconds: 3800),
     );
 
-    // Create staggered fade intervals for 6 text blocks + 1 button
     final stepFraction = 1.0 / (_sentences.length + 1);
     for (int i = 0; i < _sentences.length + 1; i++) {
       final start = i * stepFraction;
@@ -309,15 +257,13 @@ class _EmotionalIntroPageState extends State<_EmotionalIntroPage> with SingleTic
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32.0),
+      padding: const EdgeInsets.symmetric(horizontal: 28.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Spacer(flex: 3),
+          const Spacer(flex: 3), // Centers the message block more vertically
           ...List.generate(_sentences.length, (index) {
             final isHighlight = index == _sentences.length - 1;
             return AnimatedBuilder(
@@ -326,16 +272,16 @@ class _EmotionalIntroPageState extends State<_EmotionalIntroPage> with SingleTic
                 return Opacity(
                   opacity: _fadeAnimations[index].value,
                   child: Transform.translate(
-                    offset: Offset(0, 15 * (1.0 - _fadeAnimations[index].value)),
+                    offset: Offset(0, 10 * (1.0 - _fadeAnimations[index].value)),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      padding: const EdgeInsets.symmetric(vertical: 10.0),
                       child: Text(
                         _sentences[index],
                         style: GoogleFonts.outfit(
-                          fontSize: isHighlight ? 24 : 20,
-                          fontWeight: isHighlight ? FontWeight.bold : FontWeight.w500,
+                          fontSize: isHighlight ? 24 : 19,
+                          fontWeight: isHighlight ? FontWeight.bold : FontWeight.w400,
                           color: isHighlight ? Colors.white : Colors.white70,
-                          height: 1.4,
+                          height: 1.5,
                         ),
                       ),
                     ),
@@ -344,42 +290,30 @@ class _EmotionalIntroPageState extends State<_EmotionalIntroPage> with SingleTic
               },
             );
           }),
-          const Spacer(flex: 2),
+          const Spacer(flex: 3),
           AnimatedBuilder(
             animation: _controller,
             builder: (context, child) {
               return Opacity(
                 opacity: _fadeAnimations.last.value,
                 child: Transform.translate(
-                  offset: Offset(0, 15 * (1.0 - _fadeAnimations.last.value)),
+                  offset: Offset(0, 10 * (1.0 - _fadeAnimations.last.value)),
                   child: child,
                 ),
               );
             },
-            child: SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                onPressed: widget.onFinished,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.accentColor,
-                  foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                ),
-                child: Text(
-                  'Enter Ripple',
-                  style: GoogleFonts.outfit(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+            child: _AnimatedScaleButton(
+              onPressed: widget.onFinished,
+              child: Text(
+                'Enter Ripple',
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 48),
+          const SizedBox(height: 50),
         ],
       ),
     );
@@ -399,7 +333,7 @@ class _PersonaShowcasePage extends StatefulWidget {
 }
 
 class _PersonaShowcasePageState extends State<_PersonaShowcasePage> {
-  final PageController _carouselController = PageController(viewportFraction: 0.82);
+  final PageController _carouselController = PageController(viewportFraction: 0.80);
   int _focusedIndex = 0;
 
   final List<Map<String, String>> _personas = [
@@ -434,27 +368,30 @@ class _PersonaShowcasePageState extends State<_PersonaShowcasePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 80),
+        const SizedBox(height: 110), // Large breathing space below Status Bar
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
-            'Meet Great Minds',
+            'Who would you ask if they were still here?',
             style: GoogleFonts.outfit(
-              fontSize: 28,
+              fontSize: 27,
               fontWeight: FontWeight.bold,
               color: Colors.white,
+              height: 1.25,
             ),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 12),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
-            'Step into discussions with historic personalities, leaders, and thinkers.',
+            'History is ready to answer.',
             style: TextStyle(color: Colors.white54, fontSize: 14, height: 1.4),
           ),
         ),
-        const Spacer(),
+        const SizedBox(height: 36), // Balanced breathing room above Card Hero
+
+        // Dynamic Swipe-scale Carousel
         SizedBox(
           height: 380,
           child: PageView.builder(
@@ -467,29 +404,38 @@ class _PersonaShowcasePageState extends State<_PersonaShowcasePage> {
             },
             itemBuilder: (context, index) {
               final persona = _personas[index];
-              final isFocused = index == _focusedIndex;
-              final scale = isFocused ? 1.0 : 0.9;
-
-              return AnimatedScale(
-                scale: scale,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
+              return AnimatedBuilder(
+                animation: _carouselController,
+                builder: (context, child) {
+                  double value = 1.0;
+                  if (_carouselController.position.hasContentDimensions) {
+                    value = _carouselController.page! - index;
+                    value = (1.0 - (value.abs() * 0.12)).clamp(0.88, 1.0);
+                  } else {
+                    value = index == 0 ? 1.0 : 0.88;
+                  }
+                  return Transform.scale(
+                    scale: value,
+                    child: child,
+                  );
+                },
                 child: Container(
-                  margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                  margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 6.0),
                   decoration: BoxDecoration(
                     color: AppTheme.cardBgColor,
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
-                      color: isFocused 
-                          ? AppTheme.accentColor.withOpacity(0.3) 
+                      color: index == _focusedIndex 
+                          ? AppTheme.accentColor.withOpacity(0.35) 
                           : Colors.white.withOpacity(0.05),
                       width: 1.5,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.4),
-                        blurRadius: 16,
-                        offset: const Offset(0, 8),
+                        color: Colors.black.withOpacity(0.5),
+                        blurRadius: 24,
+                        spreadRadius: -4,
+                        offset: const Offset(0, 12),
                       ),
                     ],
                   ),
@@ -498,7 +444,7 @@ class _PersonaShowcasePageState extends State<_PersonaShowcasePage> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        // Image background
+                        // Image background (Brightened, overlay only at text area)
                         CachedNetworkImage(
                           imageUrl: persona["image"]!,
                           fit: BoxFit.cover,
@@ -516,9 +462,9 @@ class _PersonaShowcasePageState extends State<_PersonaShowcasePage> {
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                                 colors: [
-                                  Colors.black.withOpacity(0.1),
-                                  Colors.black.withOpacity(0.5),
-                                  Colors.black.withOpacity(0.9),
+                                  Colors.black.withOpacity(0.0),   // Keeps hero face bright
+                                  Colors.black.withOpacity(0.3),   // Mid transition
+                                  Colors.black.withOpacity(0.85),  // Dark background for typography
                                 ],
                                 stops: const [0.0, 0.45, 1.0],
                               ),
@@ -542,7 +488,7 @@ class _PersonaShowcasePageState extends State<_PersonaShowcasePage> {
                                   persona["tag"]!,
                                   style: TextStyle(
                                     color: AppTheme.accentColor,
-                                    fontSize: 10,
+                                    fontSize: 9,
                                     fontWeight: FontWeight.bold,
                                     letterSpacing: 0.5,
                                   ),
@@ -553,16 +499,16 @@ class _PersonaShowcasePageState extends State<_PersonaShowcasePage> {
                                 persona["name"]!,
                                 style: GoogleFonts.outfit(
                                   color: Colors.white,
-                                  fontSize: 26,
+                                  fontSize: 25,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 4), // Reduced spacing as requested
                               Text(
                                 '"${persona["quote"]!}"',
                                 style: GoogleFonts.outfit(
                                   color: Colors.white70,
-                                  fontSize: 14,
+                                  fontSize: 13.5,
                                   fontStyle: FontStyle.italic,
                                   height: 1.4,
                                 ),
@@ -579,7 +525,8 @@ class _PersonaShowcasePageState extends State<_PersonaShowcasePage> {
           ),
         ),
         const Spacer(),
-        // Navigation Buttons
+
+        // Continue CTA Section
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
           child: Row(
@@ -596,22 +543,11 @@ class _PersonaShowcasePageState extends State<_PersonaShowcasePage> {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: SizedBox(
-                  height: 54,
-                  child: ElevatedButton(
-                    onPressed: widget.onFinished,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.accentColor,
-                      foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      'Continue',
-                      style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
+                child: _AnimatedScaleButton(
+                  onPressed: widget.onFinished,
+                  child: Text(
+                    'Continue',
+                    style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -636,7 +572,7 @@ class _ChallengeShowcasePage extends StatefulWidget {
 }
 
 class _ChallengeShowcasePageState extends State<_ChallengeShowcasePage> {
-  final PageController _carouselController = PageController(viewportFraction: 0.82);
+  final PageController _carouselController = PageController(viewportFraction: 0.80);
   int _focusedIndex = 0;
 
   final List<Map<String, dynamic>> _challenges = [
@@ -677,27 +613,30 @@ class _ChallengeShowcasePageState extends State<_ChallengeShowcasePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 80),
+        const SizedBox(height: 110),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
-            'Test Your Strategies',
+            "Think you can win an argument against history's greatest minds?",
             style: GoogleFonts.outfit(
-              fontSize: 28,
+              fontSize: 27,
               fontWeight: FontWeight.bold,
               color: Colors.white,
+              height: 1.25,
             ),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 12),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
-            'Accept complex prompts and see if you have what it takes to succeed.',
+            'Every negotiation is unique.',
             style: TextStyle(color: Colors.white54, fontSize: 14, height: 1.4),
           ),
         ),
-        const Spacer(),
+        const SizedBox(height: 36),
+
+        // Dynamic Swipe-scale Carousel
         SizedBox(
           height: 350,
           child: PageView.builder(
@@ -710,31 +649,41 @@ class _ChallengeShowcasePageState extends State<_ChallengeShowcasePage> {
             },
             itemBuilder: (context, index) {
               final challenge = _challenges[index];
-              final isFocused = index == _focusedIndex;
-              final scale = isFocused ? 1.0 : 0.9;
               final Color borderCol = challenge["color"];
 
-              return AnimatedScale(
-                scale: scale,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
+              return AnimatedBuilder(
+                animation: _carouselController,
+                builder: (context, child) {
+                  double value = 1.0;
+                  if (_carouselController.position.hasContentDimensions) {
+                    value = _carouselController.page! - index;
+                    value = (1.0 - (value.abs() * 0.12)).clamp(0.88, 1.0);
+                  } else {
+                    value = index == 0 ? 1.0 : 0.88;
+                  }
+                  return Transform.scale(
+                    scale: value,
+                    child: child,
+                  );
+                },
                 child: Container(
-                  margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+                  margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 6.0),
                   padding: const EdgeInsets.all(28.0),
                   decoration: BoxDecoration(
                     color: AppTheme.cardBgColor,
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
-                      color: isFocused 
-                          ? borderCol.withOpacity(0.4) 
+                      color: index == _focusedIndex 
+                          ? borderCol.withOpacity(0.45) 
                           : Colors.white.withOpacity(0.05),
                       width: 1.5,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.4),
-                        blurRadius: 16,
-                        offset: const Offset(0, 8),
+                        color: Colors.black.withOpacity(0.5),
+                        blurRadius: 24,
+                        spreadRadius: -4,
+                        offset: const Offset(0, 12),
                       ),
                     ],
                   ),
@@ -748,7 +697,7 @@ class _ChallengeShowcasePageState extends State<_ChallengeShowcasePage> {
                         challenge["title"]!,
                         style: GoogleFonts.outfit(
                           color: Colors.white,
-                          fontSize: 22,
+                          fontSize: 21,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -816,7 +765,8 @@ class _ChallengeShowcasePageState extends State<_ChallengeShowcasePage> {
           ),
         ),
         const Spacer(),
-        // Navigation Buttons
+
+        // Action Buttons
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
           child: Row(
@@ -833,22 +783,11 @@ class _ChallengeShowcasePageState extends State<_ChallengeShowcasePage> {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: SizedBox(
-                  height: 54,
-                  child: ElevatedButton(
-                    onPressed: widget.onFinished,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.accentColor,
-                      foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      'Continue',
-                      style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
+                child: _AnimatedScaleButton(
+                  onPressed: widget.onFinished,
+                  child: Text(
+                    'Continue',
+                    style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -904,27 +843,29 @@ class _EmotionShowcasePageState extends State<_EmotionShowcasePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 80),
+        const SizedBox(height: 110),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
-            'Dynamic Relationships',
+            'What if every conversation changed the relationship?',
             style: GoogleFonts.outfit(
-              fontSize: 28,
+              fontSize: 27,
               fontWeight: FontWeight.bold,
               color: Colors.white,
+              height: 1.25,
             ),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 12),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
-            'Each conversation alters the mindset, trust, and response metrics of the AI.',
+            'Every word matters. Every choice has consequences.',
             style: TextStyle(color: Colors.white54, fontSize: 14, height: 1.4),
           ),
         ),
-        const Spacer(),
+        const SizedBox(height: 36),
+
         Center(
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 28.0),
@@ -935,10 +876,11 @@ class _EmotionShowcasePageState extends State<_EmotionShowcasePage> {
               border: Border.all(color: Colors.white.withOpacity(0.05)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                )
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 24,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 12),
+                ),
               ],
             ),
             child: Column(
@@ -949,7 +891,6 @@ class _EmotionShowcasePageState extends State<_EmotionShowcasePage> {
                   style: TextStyle(color: Colors.white30, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                 ),
                 const SizedBox(height: 16),
-                // Mood emoji and name
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 500),
                   transitionBuilder: (child, anim) => FadeTransition(
@@ -968,7 +909,7 @@ class _EmotionShowcasePageState extends State<_EmotionShowcasePage> {
                         _moods[_moodIndex]["text"]!,
                         style: GoogleFonts.outfit(
                           color: Colors.white,
-                          fontSize: 18,
+                          fontSize: 17,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -976,7 +917,6 @@ class _EmotionShowcasePageState extends State<_EmotionShowcasePage> {
                   ),
                 ),
                 const SizedBox(height: 32),
-                // Progress Bars
                 _buildProgressBar('Trust', 0.8),
                 const SizedBox(height: 16),
                 _buildProgressBar('Patience', 0.5),
@@ -998,7 +938,8 @@ class _EmotionShowcasePageState extends State<_EmotionShowcasePage> {
           ),
         ),
         const Spacer(),
-        // Navigation Buttons
+
+        // Action Buttons
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
           child: Row(
@@ -1015,22 +956,11 @@ class _EmotionShowcasePageState extends State<_EmotionShowcasePage> {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: SizedBox(
-                  height: 54,
-                  child: ElevatedButton(
-                    onPressed: widget.onFinished,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.accentColor,
-                      foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      'Continue',
-                      style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
+                child: _AnimatedScaleButton(
+                  onPressed: widget.onFinished,
+                  child: Text(
+                    'Continue',
+                    style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -1103,27 +1033,28 @@ class _ChooseInterestsPage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 80),
+        const SizedBox(height: 110),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
             'What excites you?',
             style: GoogleFonts.outfit(
-              fontSize: 28,
+              fontSize: 27,
               fontWeight: FontWeight.bold,
               color: Colors.white,
             ),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 12),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
-            'Select interests to help display recommended personas to discuss and chat with.',
+            'Select topics to shape your recommendations.',
             style: TextStyle(color: Colors.white54, fontSize: 14, height: 1.4),
           ),
         ),
-        const Spacer(),
+        const SizedBox(height: 36),
+
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Wrap(
@@ -1162,7 +1093,8 @@ class _ChooseInterestsPage extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        // Navigation Buttons
+
+        // Action Buttons
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
           child: Row(
@@ -1179,26 +1111,17 @@ class _ChooseInterestsPage extends StatelessWidget {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: SizedBox(
-                  height: 54,
-                  child: ElevatedButton(
-                    onPressed: selectedInterests.isEmpty ? null : onFinished,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.accentColor,
-                      foregroundColor: Colors.black,
-                      disabledBackgroundColor: AppTheme.cardBgColor.withOpacity(0.4),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      'Continue',
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: selectedInterests.isEmpty ? Colors.white24 : Colors.black,
-                      ),
+                child: _AnimatedScaleButton(
+                  onPressed: selectedInterests.isEmpty ? null : onFinished,
+                  backgroundColor: selectedInterests.isEmpty 
+                      ? AppTheme.cardBgColor.withOpacity(0.4) 
+                      : AppTheme.accentColor,
+                  child: Text(
+                    'Continue',
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: selectedInterests.isEmpty ? Colors.white24 : Colors.black,
                     ),
                   ),
                 ),
@@ -1231,19 +1154,19 @@ class _RecommendedPersonasPage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 80),
+        const SizedBox(height: 110),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
             'Recommended for You',
             style: GoogleFonts.outfit(
-              fontSize: 28,
+              fontSize: 27,
               fontWeight: FontWeight.bold,
               color: Colors.white,
             ),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 12),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
@@ -1251,9 +1174,8 @@ class _RecommendedPersonasPage extends StatelessWidget {
             style: TextStyle(color: Colors.white54, fontSize: 14, height: 1.4),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 36),
 
-        // Persona List Grid
         Expanded(
           child: provider.isLoading && personas.isEmpty
               ? Center(child: CircularProgressIndicator(color: AppTheme.accentColor))
@@ -1284,10 +1206,8 @@ class _RecommendedPersonasPage extends StatelessWidget {
                         final persona = personas[index];
                         return InkWell(
                           onTap: () async {
-                            // 1. Complete onboarding locally
                             await provider.completeOnboarding();
                             
-                            // 2. Perform a reset and route directly to Live Chat Screen
                             if (context.mounted) {
                               Navigator.pushAndRemoveUntil(
                                 context,
@@ -1309,10 +1229,16 @@ class _RecommendedPersonasPage extends StatelessWidget {
                               color: AppTheme.cardBgColor,
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(color: Colors.white.withOpacity(0.05)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.15),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
                             ),
                             child: Row(
                               children: [
-                                // Avatar photo
                                 CircleAvatar(
                                   radius: 30,
                                   backgroundColor: Colors.white.withOpacity(0.02),
@@ -1327,7 +1253,6 @@ class _RecommendedPersonasPage extends StatelessWidget {
                                       : null,
                                 ),
                                 const SizedBox(width: 16),
-                                // Text fields
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1364,7 +1289,7 @@ class _RecommendedPersonasPage extends StatelessWidget {
                     ),
         ),
 
-        // Navigation Back Button
+        // Action Buttons
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
           child: SizedBox(

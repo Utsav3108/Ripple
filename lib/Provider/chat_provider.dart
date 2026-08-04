@@ -900,16 +900,19 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
 
   Future<void> checkOnboardingStatus() async {
     if (_currentUserId == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    _isOnboardingCompleted = prefs.getBool('onboarding_completed_${_currentUserId}') ?? false;
+    // For testing purposes: bypass SharedPreferences lookup so onboarding is visible on each build
+    // final prefs = await SharedPreferences.getInstance();
+    // _isOnboardingCompleted = prefs.getBool('onboarding_completed_${_currentUserId}') ?? false;
+    _isOnboardingCompleted = false;
     notifyListeners();
   }
 
   Future<void> completeOnboarding() async {
     if (_currentUserId == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('onboarding_completed_${_currentUserId}', true);
-    _isOnboardingCompleted = true;
+    // For testing purposes: bypass SharedPreferences writing so onboarding is visible on each build
+    // final prefs = await SharedPreferences.getInstance();
+    // await prefs.setBool('onboarding_completed_${_currentUserId}', true);
+    _isOnboardingCompleted = true; // Temporarily allow transitioning to ChatListScreen/ChatScreen
     notifyListeners();
   }
 
