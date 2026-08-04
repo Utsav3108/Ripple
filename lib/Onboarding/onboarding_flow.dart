@@ -870,21 +870,45 @@ class _EmotionShowcasePage extends StatefulWidget {
 }
 
 class _EmotionShowcasePageState extends State<_EmotionShowcasePage> {
-  int _moodIndex = 0;
-  final List<Map<String, String>> _moods = [
-    {"emoji": "🙂", "text": "Calm"},
-    {"emoji": "🤔", "text": "Curious"},
-    {"emoji": "😠", "text": "Annoyed"},
+  int _activeStateIndex = 0;
+  Timer? _stateTimer;
+
+  final List<Map<String, dynamic>> _states = [
+    {
+      "mood": "Calm",
+      "emoji": "🙂",
+      "color": Colors.greenAccent,
+      "userMsg": "I think your theory is incorrect.",
+      "replyMsg": "Interesting. Show me your evidence, and let's dissect the logic together.",
+    },
+    {
+      "mood": "Defensive",
+      "emoji": "🤨",
+      "color": Colors.orangeAccent,
+      "userMsg": "I think your theory is incorrect.",
+      "replyMsg": "My logic is sound. Perhaps you have overlooked a crucial piece of the puzzle?",
+    },
+    {
+      "mood": "Sharp",
+      "emoji": "⚡",
+      "color": Colors.redAccent,
+      "userMsg": "I think your theory is incorrect.",
+      "replyMsg": "Incorrect? Bold claim. Make sure your facts are straight before questioning my work.",
+    }
   ];
-  Timer? _moodTimer;
 
   @override
   void initState() {
     super.initState();
-    _moodTimer = Timer.periodic(const Duration(milliseconds: 1500), (timer) {
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _stateTimer?.cancel();
+    _stateTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
       if (mounted) {
         setState(() {
-          _moodIndex = (_moodIndex + 1) % _moods.length;
+          _activeStateIndex = (_activeStateIndex + 1) % _states.length;
         });
       }
     });
@@ -892,12 +916,52 @@ class _EmotionShowcasePageState extends State<_EmotionShowcasePage> {
 
   @override
   void dispose() {
-    _moodTimer?.cancel();
+    _stateTimer?.cancel();
     super.dispose();
+  }
+
+  Widget _buildStateChip(int index, String label, Color color) {
+    final isActive = _activeStateIndex == index;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _activeStateIndex = index;
+        });
+        _startTimer();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? color.withOpacity(0.12) : Colors.white.withOpacity(0.02),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive ? color.withOpacity(0.4) : Colors.white.withOpacity(0.08),
+            width: 1.2,
+          ),
+        ),
+        child: Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: GoogleFonts.outfit(
+                color: isActive ? color : Colors.white70,
+                fontSize: 13,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final activeState = _states[_activeStateIndex];
+    final Color stateColor = activeState["color"];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -905,7 +969,7 @@ class _EmotionShowcasePageState extends State<_EmotionShowcasePage> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
-            'What if every conversation changed the relationship?',
+            'Conversations that feel alive.',
             style: GoogleFonts.outfit(
               fontSize: 27,
               fontWeight: FontWeight.bold,
@@ -918,16 +982,17 @@ class _EmotionShowcasePageState extends State<_EmotionShowcasePage> {
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 24.0),
           child: Text(
-            'Every word matters. Every choice has consequences.',
+            "Personas aren't static scripts. They react to your tone, adjust their mood, and respond with real emotion.",
             style: TextStyle(color: Colors.white54, fontSize: 14, height: 1.4),
           ),
         ),
-        const SizedBox(height: 36),
+        const SizedBox(height: 32),
 
+        // High fidelity interactive simulated conversation
         Center(
           child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 28.0),
-            padding: const EdgeInsets.all(28.0),
+            margin: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: const EdgeInsets.all(24.0),
             decoration: BoxDecoration(
               color: AppTheme.cardBgColor,
               borderRadius: BorderRadius.circular(24),
@@ -943,53 +1008,158 @@ class _EmotionShowcasePageState extends State<_EmotionShowcasePage> {
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'CURRENT MOOD',
-                  style: TextStyle(color: Colors.white30, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                ),
-                const SizedBox(height: 16),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 500),
-                  transitionBuilder: (child, anim) => FadeTransition(
-                    opacity: anim,
-                    child: ScaleTransition(scale: anim, child: child),
-                  ),
-                  child: Column(
-                    key: ValueKey<int>(_moodIndex),
-                    children: [
-                      Text(
-                        _moods[_moodIndex]["emoji"]!,
-                        style: const TextStyle(fontSize: 48),
+                // Persona Header
+                Row(
+                  children: [
+                    // Dynamic Profile Glow Wrapper
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 400),
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: stateColor.withOpacity(0.7), width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: stateColor.withOpacity(0.3),
+                            blurRadius: 12,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                        image: const DecorationImage(
+                          image: CachedNetworkImageProvider(
+                            'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=400',
+                          ),
+                          fit: BoxFit.cover,
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _moods[_moodIndex]["text"]!,
+                    ),
+                    const SizedBox(width: 14),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Sherlock Holmes',
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Consulting Detective',
+                          style: TextStyle(color: Colors.white38, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
+                    // Active State Tag
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: stateColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: stateColor.withOpacity(0.25)),
+                      ),
+                      child: Text(
+                        activeState["mood"],
                         style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 17,
+                          color: stateColor,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                const Divider(color: Colors.white10, height: 1),
+                const SizedBox(height: 24),
+
+                // Chat bubble section
+                Text(
+                  'YOU',
+                  style: TextStyle(
+                    color: Colors.white30,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
                   ),
                 ),
-                const SizedBox(height: 32),
-                _buildProgressBar('Trust', 0.8),
-                const SizedBox(height: 16),
-                _buildProgressBar('Patience', 0.5),
-                const SizedBox(height: 16),
-                _buildProgressBar('Respect', 0.35),
-                const SizedBox(height: 28),
-                const Divider(color: Colors.white10),
-                const SizedBox(height: 12),
-                Text(
-                  'Every conversation changes the relationship.',
-                  style: GoogleFonts.outfit(
-                    color: AppTheme.accentColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(14),
+                      bottomLeft: Radius.circular(14),
+                      bottomRight: Radius.circular(14),
+                    ),
                   ),
+                  child: Text(
+                    activeState["userMsg"],
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 300),
+                  style: TextStyle(
+                    color: stateColor.withOpacity(0.8),
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                  child: const Text('SHERLOCK HOLMES'),
+                ),
+                const SizedBox(height: 6),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.pureBlack,
+                    border: Border.all(color: stateColor.withOpacity(0.15)),
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(14),
+                      bottomLeft: Radius.circular(14),
+                      bottomRight: Radius.circular(14),
+                    ),
+                  ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    transitionBuilder: (child, animation) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                    child: Text(
+                      activeState["replyMsg"],
+                      key: ValueKey<int>(_activeStateIndex),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 28),
+                const Divider(color: Colors.white10, height: 1),
+                const SizedBox(height: 20),
+
+                Row(
+                  children: [
+                    Expanded(child: _buildStateChip(0, "Calm", Colors.greenAccent)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _buildStateChip(1, "Defensive", Colors.orangeAccent)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _buildStateChip(2, "Sharp", Colors.redAccent)),
+                  ],
                 ),
               ],
             ),
@@ -1023,31 +1193,6 @@ class _EmotionShowcasePageState extends State<_EmotionShowcasePage> {
                 ),
               ),
             ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildProgressBar(String label, double value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500)),
-            Text('${(value * 100).toInt()}%', style: const TextStyle(color: Colors.white38, fontSize: 11)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: value,
-            minHeight: 6,
-            backgroundColor: Colors.white10,
-            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accentColor.withOpacity(0.8)),
           ),
         ),
       ],
