@@ -8,4 +8,7 @@ class AppConfig {
   // Google Analytics GA4 Credentials (Measurement Protocol)
   static const String gaMeasurementId = 'G-YN2Q17MQ03'; // Replace with real Measurement ID
   static const String gaApiSecret = '3vNLwGRSTIeDBj-Av1of5A'; // Replace with real API Secret
+
+  // Onboarding text arrival configuration
+  static const Duration onboardingStatementInterval = Duration(seconds: 2);
 }

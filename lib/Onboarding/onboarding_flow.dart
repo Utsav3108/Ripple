@@ -8,6 +8,7 @@ import '../Provider/chat_provider.dart';
 import '../Theme/app_theme.dart';
 import '../chat_screen.dart';
 import '../chat_list_screen.dart';
+import '../core/config/app_config.dart';
 
 // Custom reusable premium scale button for tactile feedback
 class _AnimatedScaleButton extends StatefulWidget {
@@ -227,20 +228,31 @@ class _EmotionalIntroPageState extends State<_EmotionalIntroPage> with SingleTic
   @override
   void initState() {
     super.initState();
+    
+    final interval = AppConfig.onboardingStatementInterval;
+    final fadeDuration = const Duration(milliseconds: 800);
+    final totalSteps = _sentences.length + 1; // 6 sentences + 1 button
+    final totalDuration = (interval * (totalSteps - 1)) + fadeDuration;
+
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3800),
+      duration: totalDuration,
     );
 
-    final stepFraction = 1.0 / (_sentences.length + 1);
-    for (int i = 0; i < _sentences.length + 1; i++) {
-      final start = i * stepFraction;
-      final end = (i + 1) * stepFraction;
+    final totalMs = totalDuration.inMilliseconds.toDouble();
+    for (int i = 0; i < totalSteps; i++) {
+      final startMs = i * interval.inMilliseconds.toDouble();
+      final endMs = startMs + fadeDuration.inMilliseconds.toDouble();
+      
       _fadeAnimations.add(
         Tween<double>(begin: 0.0, end: 1.0).animate(
           CurvedAnimation(
             parent: _controller,
-            curve: Interval(start, end, curve: Curves.easeInOut),
+            curve: Interval(
+              (startMs / totalMs).clamp(0.0, 1.0),
+              (endMs / totalMs).clamp(0.0, 1.0),
+              curve: Curves.easeOutCubic,
+            ),
           ),
         ),
       );
@@ -335,6 +347,7 @@ class _PersonaShowcasePage extends StatefulWidget {
 class _PersonaShowcasePageState extends State<_PersonaShowcasePage> {
   final PageController _carouselController = PageController(viewportFraction: 0.80);
   int _focusedIndex = 0;
+  Timer? _autoPlayTimer;
 
   final List<Map<String, String>> _personas = [
     {
@@ -358,7 +371,28 @@ class _PersonaShowcasePageState extends State<_PersonaShowcasePage> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _autoPlayTimer?.cancel();
+    _autoPlayTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (mounted && _carouselController.hasClients) {
+        final nextPage = (_carouselController.page!.round() + 1) % _personas.length;
+        _carouselController.animateToPage(
+          nextPage,
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeInOutCubic,
+        );
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _autoPlayTimer?.cancel();
     _carouselController.dispose();
     super.dispose();
   }
@@ -401,6 +435,7 @@ class _PersonaShowcasePageState extends State<_PersonaShowcasePage> {
               setState(() {
                 _focusedIndex = idx;
               });
+              _startTimer();
             },
             itemBuilder: (context, index) {
               final persona = _personas[index];
@@ -574,6 +609,7 @@ class _ChallengeShowcasePage extends StatefulWidget {
 class _ChallengeShowcasePageState extends State<_ChallengeShowcasePage> {
   final PageController _carouselController = PageController(viewportFraction: 0.80);
   int _focusedIndex = 0;
+  Timer? _autoPlayTimer;
 
   final List<Map<String, dynamic>> _challenges = [
     {
@@ -603,7 +639,28 @@ class _ChallengeShowcasePageState extends State<_ChallengeShowcasePage> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _autoPlayTimer?.cancel();
+    _autoPlayTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (mounted && _carouselController.hasClients) {
+        final nextPage = (_carouselController.page!.round() + 1) % _challenges.length;
+        _carouselController.animateToPage(
+          nextPage,
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeInOutCubic,
+        );
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _autoPlayTimer?.cancel();
     _carouselController.dispose();
     super.dispose();
   }
@@ -646,6 +703,7 @@ class _ChallengeShowcasePageState extends State<_ChallengeShowcasePage> {
               setState(() {
                 _focusedIndex = idx;
               });
+              _startTimer();
             },
             itemBuilder: (context, index) {
               final challenge = _challenges[index];
