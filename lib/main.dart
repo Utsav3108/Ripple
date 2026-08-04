@@ -5,6 +5,7 @@ import 'login_screen.dart';
 import 'Provider/chat_provider.dart';
 import 'Theme/app_theme.dart';
 import 'Services/notification_service.dart';
+import 'Onboarding/onboarding_flow.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -33,9 +34,13 @@ class MyApp extends StatelessWidget {
       theme: AppTheme.darkTheme,
       home: Consumer<ChatProvider>(
         builder: (context, provider, child) {
-          return provider.isAuthenticated
-              ? const ChatListScreen()
-              : const LoginScreen();
+          if (provider.isAuthenticated) {
+            return provider.isOnboardingCompleted
+                ? const ChatListScreen()
+                : const OnboardingFlow();
+          } else {
+            return const LoginScreen();
+          }
         },
       ),
     );

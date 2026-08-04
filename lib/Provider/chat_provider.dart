@@ -19,6 +19,8 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
   List<Challenge> _challengeSearchResults = [];
   List<Challenge> _challenges = [];
   List<Persona> _allPersonas = [];
+  bool _isOnboardingCompleted = false;
+  bool get isOnboardingCompleted => _isOnboardingCompleted;
   
   Challenge? _dailyChallenge;
   List<Challenge> _trendingChallenges = [];
@@ -748,6 +750,9 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
         // Load sessions and blocks
         await _loadAllPersonaSessionsAndBlocks(_currentUserId!);
         
+        // Onboarding Status Check
+        await checkOnboardingStatus();
+        
         // Fetch data
         await fetchChattedPersonas();
         await fetchChallenges();
@@ -784,6 +789,7 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
                 _userImageUrl = data['image_url']?.toString() ?? googleUser.photoUrl ?? '';
                 
                 _socketManager.connect(_currentUserId!);
+                await checkOnboardingStatus();
                 await fetchChattedPersonas();
                 await fetchChallenges();
                 await fetchActiveSessions();
@@ -848,6 +854,7 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
         // Connect Socket
         _socketManager.connect(_currentUserId!);
         await _loadAllPersonaSessionsAndBlocks(_currentUserId!);
+        await checkOnboardingStatus();
         
         // Fetch data
         await fetchChattedPersonas();
@@ -891,6 +898,20 @@ class ChatProvider with ChangeNotifier, WidgetsBindingObserver {
     notifyListeners();
   }
 
+  Future<void> checkOnboardingStatus() async {
+    if (_currentUserId == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    _isOnboardingCompleted = prefs.getBool('onboarding_completed_${_currentUserId}') ?? false;
+    notifyListeners();
+  }
+
+  Future<void> completeOnboarding() async {
+    if (_currentUserId == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboarding_completed_${_currentUserId}', true);
+    _isOnboardingCompleted = true;
+    notifyListeners();
+  }
 
   Persona? getPersonaById(int id) {
     try {
